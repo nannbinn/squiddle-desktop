@@ -2075,6 +2075,7 @@ function updateCamera(dt){
 
 // ---------- 主循环 ----------
 let last = performance.now(), skinClock = 0, memAcc = 0, fpsN = 0, fpsT = 0, FPS = 0, CAP = 0, lastDraw = 0;
+let HOLD = false;        // 开场页盖着舞台时：照常模拟，但不渲染，省显卡
 function frame(now){
   requestAnimationFrame(frame);
   if(CAP){                                                  // 帧率上限：按时间表画，没到时间就跳过这一帧
@@ -2148,6 +2149,7 @@ function frame(now){
   mantleG.updateMatrixWorld();
   post.uniforms.projInv.value.copy(camera.projectionMatrixInverse); post.uniforms.camWorld.value.copy(camera.matrixWorld);
   post.uniforms.mantleInv.value.copy(mantleG.matrixWorld).invert();
+  if(HOLD) return;
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
@@ -2711,6 +2713,6 @@ window.Squiddle = {
     LIB.splice(i, 1);
     if(S === CUR) loadSong(LIB[Math.min(i, LIB.length - 1)], playing); else emit('lib', libInfo());
   },
-  unlockAudio, exampleTab:EXAMPLE_TAB, view:canvas,
+  unlockAudio, hold(v){ HOLD = !!v; }, exampleTab:EXAMPLE_TAB, view:canvas,
 };
 })();

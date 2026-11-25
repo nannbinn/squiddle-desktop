@@ -491,7 +491,7 @@ const Glyphs = (() => {
     band: 0.22, thMin: 0.35, thMax: 0.85,
     rise: 14, fall: 0.85, radius: 40,
     fastHz: 16, slowHz: 1.2, dimAlpha: 0.1, fps: 30,
-    idleMs: 2500, follow: 6,
+    idleMs: 2500, follow: 6,             // 鼠标停下 2.5 秒或移出窗口，亮区就不再补亮，慢慢退回乱码
   };
   const CH = 'abcdefghijklmnopqrstuvwxyz<>/\\|=+-_*:;.,';
   const STORY = [
@@ -510,7 +510,7 @@ const Glyphs = (() => {
   const cv = $('#glyphs'), ctx = cv.getContext('2d');
   const slowCv = document.createElement('canvas'), sctx = slowCv.getContext('2d');
   let W = 0, H = 0, dpr = 1, cols = 0, rows = 0, x0 = 0, y0 = 0, n = 0;
-  let real = [], th, h, ph, slowK, mask, pointer = null, lens = null, t = 0, last = 0, running = false;
+  let real = [], th, h, ph, slowK, mask, pointer = null, lens = null, wasLive = false, lit = false, t = 0, last = 0, running = false;
   let col = {}, squid = null, sqC0 = 0, sqR0 = 0;
   const hash = (i, k) => {
     let x = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((k + 0x632be5ab) | 0, 0xc2b2ae35);
@@ -578,21 +578,26 @@ const Glyphs = (() => {
     const R = CFG.radius*(1 + 0.26*Math.sin(3*a + t*1.7) + 0.14*Math.sin(5*a - t*2.3) + 0.08*Math.sin(8*a + t*0.9));
     return Math.max(0, Math.min(1.25, (1 - d/R)*2.2));
   }
-  const wander = () => ({x: W*(0.5 + 0.38*Math.sin(t*0.31)*Math.cos(t*0.17)), y: H*(0.5 + 0.34*Math.sin(t*0.23 + 1.3))});
   function step(dt){
     t += dt;
     const live = pointer && performance.now() - pointer.at < CFG.idleMs;
-    const goal = live ? pointer : wander();
-    if(!lens) lens = {x: goal.x, y: goal.y};
-    const k = 1 - Math.exp(-dt*(live ? CFG.follow*2 : CFG.follow*0.35));
-    lens.x += (goal.x - lens.x)*k; lens.y += (goal.y - lens.y)*k;
+    if(live){
+      if(!lens || !wasLive) lens = {x: pointer.x, y: pointer.y};     // 鼠标重新动起来：亮区直接出现在鼠标处
+      wasLive = true;
+      const k = 1 - Math.exp(-dt*CFG.follow*2);
+      lens.x += (pointer.x - lens.x)*k; lens.y += (pointer.y - lens.y)*k;
+    }
+    else { wasLive = false; if(!lit) return; }                // 没有亮区、也没有余辉：什么都不用算
     const up = 1 - Math.exp(-dt*CFG.rise), down = dt*CFG.fall, R = CFG.radius*1.8;
-    const i0 = Math.max(0, Math.floor((lens.x - R - x0)/CFG.cellW)), i1 = Math.min(cols - 1, Math.ceil((lens.x + R - x0)/CFG.cellW));
-    const j0 = Math.max(0, Math.floor((lens.y - R - y0)/CFG.cellH)), j1 = Math.min(rows - 1, Math.ceil((lens.y + R - y0)/CFG.cellH));
+    const p = live ? lens : {x: -1e4, y: -1e4};
+    const i0 = Math.max(0, Math.floor((p.x - R - x0)/CFG.cellW)), i1 = Math.min(cols - 1, Math.ceil((p.x + R - x0)/CFG.cellW));
+    const j0 = Math.max(0, Math.floor((p.y - R - y0)/CFG.cellH)), j1 = Math.min(rows - 1, Math.ceil((p.y + R - y0)/CFG.cellH));
+    lit = false;
     for(let o=0; o<n; o++){
       const i = o % cols, j = (o/cols) | 0;
-      const T = (i >= i0 && i <= i1 && j >= j0 && j <= j1) ? target(x0 + (i + .5)*CFG.cellW, y0 + (j + .5)*CFG.cellH, lens) : 0;
+      const T = (i >= i0 && i <= i1 && j >= j0 && j <= j1) ? target(x0 + (i + .5)*CFG.cellW, y0 + (j + .5)*CFG.cellH, p) : 0;
       if(T > h[o]) h[o] += (T - h[o])*up; else if(h[o] > 0) h[o] = Math.max(T, h[o] - down);
+      if(h[o] > 0) lit = true;
     }
   }
   function draw(){
@@ -647,12 +652,13 @@ const Glyphs = (() => {
   addEventListener('resize', () => { if(running) build(); });
   return {
     start(){ readColors(); if(!build()) return; running = true; requestAnimationFrame(frame); if(document.fonts) document.fonts.ready.then(() => running && build()); },
-    stop(){ running = false; },
+    stop(){ running = false; cv.width = cv.height = slowCv.width = slowCv.height = 0; },   // 进了主界面就把两张大画布的显存还回去
   };
 })();
 
 S.play(false);       // 开场时先别打，开场结束再开始
 function runSplash(){
+  S.hold(true);        // 开场页盖住舞台时，舞台不渲染
   Glyphs.start();
   const dur = reduced() ? 200 : 1800, t0 = performance.now(); let f = 0, want = '';
   const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
@@ -688,6 +694,7 @@ function waitStart(){
   addEventListener('pointerup', start, true); addEventListener('keydown', start, true);
 }
 function done(){
+  S.hold(false);
   splash.classList.add('bye');
   setTimeout(() => { splash.hidden = true; Glyphs.stop(); }, 650);
   reveal($('#logoT'), 'Squiddle', {from: '########', dur: 700, force: true});
