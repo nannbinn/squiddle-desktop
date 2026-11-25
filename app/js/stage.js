@@ -2214,10 +2214,13 @@ fitLane(); new ResizeObserver(fitLane).observe(laneCv);
 const LROW = {crash:8, hihat:15, snare:22, tom1:29, tom2:29, floor:29, kick:37};
 const LCOL = {crash:'#e7c03c', hihat:'#f2e396', snare:'#ffffff', tom1:'#d2b2f5', tom2:'#ba83f0', floor:'#9b74e4', kick:'#f083a5'};
 const LSZ = {hihat:2, snare:3, tom1:3, tom2:3, floor:3, kick:4};
+const LFLASH = 0.1, LFADE = 0.8;                                // 鼓点过扫描线：闪 0.1 秒，再 0.8 秒暗成描边
+const LFL = {crash:'#ffe28a', hihat:'#fff1b8', snare:'#ffd6ea', tom1:'#ecdcff', tom2:'#dcc4ff', floor:'#cdb6ff', kick:'#ffb3cf'};
+const LDIM = {crash:'#7d6a35', hihat:'#857f60', snare:'#8d8bab', tom1:'#7a66a0', tom2:'#6c5596', floor:'#5f4f8c', kick:'#8c4d68'};
 let _ls = 11; const lrand = ()=>((_ls = (_ls*16807) % 2147483647) - 1)/2147483646;
 const SKY = Array.from({length:200}, ()=>({x:lrand()*1600, y:1 + Math.floor(lrand()*(LH - 2)), ph:lrand()*6.28, b:0.3 + 0.7*lrand()}));
 const STAR7 = ['...#...', '...#...', '..###..', '#######', '..###..', '...#...', '...#...'];
-const STAR5 = ['..#..', '.###.', '#####', '.###.', '..#..'];
+const STAR5 = ['..#..', '.###.', '#####', '.###.', '..#..'], STAR5O = ['..#..', '.#.#.', '#...#', '.#.#.', '..#..'];
 function glyph(ctx, G, cx, cy, col){ ctx.fillStyle = col; const o = G.length >> 1; G.forEach((row, j)=>{ for(let i=0;i<row.length;i++) if(row[i] === '#') ctx.fillRect(cx - o + i, cy - o + j, 1, 1); }); }
 function envAt(t){
   const E = SONG.env; if(!E || t < 0) return 0;
@@ -2258,12 +2261,22 @@ function drawLane(){
         lc.fillRect(x - 1, y - 1, z, 1); lc.fillRect(x - 1, y + 1, z, 1); lc.fillRect(x - 1, y, 1, 1); lc.fillRect(x + 1, y, 1, 1);
         lc.globalAlpha = 1; continue;
       }
-      lc.globalAlpha = past ? (lit ? 1 : 0.28) : 0.42 + 0.4*e.v;
-      if(e.i === 'crash') glyph(lc, STAR5, x, y, col);
-      else { const z = LSZ[e.i]; lc.fillStyle = col; lc.fillRect(x - (z >> 1), y - (z >> 1), z, z); }
+      const z = LSZ[e.i] || 3, age = T - (e.t + off), a0 = 0.42 + 0.4*e.v;
+      if(age < 0){                                               // 还没到：照原样
+        lc.globalAlpha = a0; if(e.i === 'crash') glyph(lc, STAR5, x, y, col); else { lc.fillStyle = col; lc.fillRect(x - (z >> 1), y - (z >> 1), z, z); }
+      } else if(age < LFLASH){                                   // 经过扫描线：用自己颜色的亮色闪一下
+        lc.globalAlpha = 1; const c = LFL[e.i];
+        if(e.i === 'crash') glyph(lc, STAR5, x, y, c); else { const zz = z + 2; lc.fillStyle = c; lc.fillRect(x - (zz >> 1), y - (zz >> 1), zz, zz); }
+      } else {                                                   // 然后 0.8 秒里慢慢暗成描边
+        const u = Math.min(1, (age - LFLASH)/LFADE), k = u*u*(3 - 2*u);
+        if(k < 1){ lc.globalAlpha = a0*(1 - k); if(e.i === 'crash') glyph(lc, STAR5, x, y, col); else { lc.fillStyle = col; lc.fillRect(x - (z >> 1), y - (z >> 1), z, z); } }
+        lc.globalAlpha = 0.62*k; const dc = LDIM[e.i];
+        if(e.i === 'crash') glyph(lc, STAR5O, x, y, dc);
+        else { const zz = z + 2, o = zz >> 1; lc.fillStyle = dc; lc.fillRect(x - o, y - o, zz, 1); lc.fillRect(x - o, y - o + zz - 1, zz, 1); lc.fillRect(x - o, y - o, 1, zz); lc.fillRect(x - o + zz - 1, y - o, 1, zz); }
+      }
       lc.globalAlpha = 1;
-      if(lit && fl >= 0 && fl < 0.35){                            // 刚打中：闪一下
-        const r = 2 + Math.round(fl*14); lc.fillStyle = 'rgba(255,255,255,' + (1 - fl/0.35).toFixed(2) + ')';
+      if(lit && fl >= 0 && fl < 0.35){                            // 刚打中：一圈淡粉的小十字散开
+        const r = 2 + Math.round(fl*14); lc.fillStyle = 'rgba(255,214,234,' + (1 - fl/0.35).toFixed(2) + ')';
         lc.fillRect(x - r, y, 1, 1); lc.fillRect(x + r, y, 1, 1); lc.fillRect(x, y - r, 1, 1); lc.fillRect(x, y + r, 1, 1);
       }
     }
@@ -2681,6 +2694,7 @@ fitView(canvas.clientWidth, canvas.clientHeight);
 window.Squiddle = {
   on(type, f){ (BUS[type] = BUS[type] || []).push(f); },
   state, song:songInfo, lib:libInfo, camera:()=>camLabel,
+  lane(){ return {phx:PHX, lw:LW, lh:LH, pps:PPS, row:LROW, col:LCOL}; },
   time(){ return {t:SONG.T < 0 ? 0 : Math.min(SONG.dur, songLocal(SONG.T)), dur:SONG.dur}; },
   fps:()=>FPS,
   play(on){ setPlaying(on === undefined ? !playing : !!on); },

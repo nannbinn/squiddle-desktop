@@ -14,9 +14,9 @@ const { _electron: electron } = require('playwright');
   const st = await win.evaluate(() => ({
     desktop: !!window.squiddleDesktop, winBtns: !document.getElementById('wbtns').hidden,
     splashGone: document.getElementById('splash').hidden, playing: window.Squiddle.state().playing,
-    title: document.getElementById('pTitle').textContent, time: document.getElementById('time').textContent,
+    title: document.getElementById('pTitle').textContent, time: document.getElementById('t0').textContent + ' / ' + document.getElementById('t1').textContent,
     songs: document.querySelectorAll('#songs .song').length,
-    fonts: ['20px "ZCOOL QingKe HuangYou"', '13px Silkscreen', 'bold 13px Silkscreen', '20px VT323'].map(f => document.fonts.check(f, 'Ab')),
+    fonts: ['12px "Fusion Pixel 12px Proportional SC"', '13px Silkscreen', 'bold 13px Silkscreen', '20px VT323'].map(f => document.fonts.check(f, f.includes('Fusion') ? 'Ab鼓' : 'Ab')),
     hits: Object.values(window.__dbg.HITS).reduce((a, b) => a + b, 0),
   }));
   console.log(JSON.stringify(st));

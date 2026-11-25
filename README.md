@@ -30,4 +30,4 @@ xvfb-run -a -s "-screen 0 1400x1000x24" node scripts/smoke.js out/smoke   # 冒�
 ## 第三方
 
 - three.js r128（MIT）
-- 字体 Silkscreen、站酷庆科黄油体、VT323（SIL Open Font License，见 app/vendor/fonts/*-LICENSE.txt）
+- 字体 Silkscreen、Fusion Pixel 12px（缝合像素字体）、VT323（SIL Open Font License，见 app/vendor/fonts/*-LICENSE.txt）
