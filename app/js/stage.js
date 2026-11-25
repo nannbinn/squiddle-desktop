@@ -2077,13 +2077,15 @@ function updateCamera(dt){
 let last = performance.now(), skinClock = 0, memAcc = 0, fpsN = 0, fpsT = 0, FPS = 0, CAP = 0, lastDraw = 0;
 function frame(now){
   requestAnimationFrame(frame);
-  if(CAP && now - lastDraw < 1000/CAP - 2) return;        // 帧率上限：没到时间就跳过这一帧
-  lastDraw = now;
+  if(CAP){                                                  // 帧率上限：按时间表画，没到时间就跳过这一帧
+    const iv = 1000/CAP; if(now - lastDraw < iv - 2) return;
+    lastDraw = now - lastDraw < 2*iv ? lastDraw + iv : now;  // 累加而不是对齐到 now，高刷屏或帧间隔不均时才不会掉一大截；落后太多就重新对齐
+  }
   const raw = (now-last)/1000, dt = Math.min(1/20, raw); last = now; FDT = dt;
   fpsN++; fpsT += raw;
   if(fpsT >= 0.5){ FPS = Math.round(fpsN/fpsT); fpsN = 0; fpsT = 0; }   // 实测帧率，调节页里显示
   simT += dt;
-  if(playing) advanceSong(dt);
+  if(playing) advanceSong(Math.min(0.25, raw));             // 歌曲时钟走真实时间（卡一下也不拖慢节拍），只有物理模拟截断步长
   const lidA = updateCharacter(dt);
   body.position.copy(bodyBase); body.position.y += Math.sin(simT*1.3)*0.035 + CH.dip.x;
   body.rotation.set(CH.roll.x, -Math.PI/2 + CH.yaw.x, CH.nod.x + 0.02*Math.sin(simT*0.9));
