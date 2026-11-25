@@ -511,7 +511,7 @@ const Glyphs = (() => {
   const slowCv = document.createElement('canvas'), sctx = slowCv.getContext('2d');
   let W = 0, H = 0, dpr = 1, cols = 0, rows = 0, x0 = 0, y0 = 0, n = 0;
   let real = [], th, h, ph, slowK, mask, pointer = null, lens = null, wasLive = false, lit = false, t = 0, last = 0, running = false;
-  let col = {}, squid = null, sqC0 = 0, sqR0 = 0;
+  let col = {}, squid = null, sqC0 = 0, sqR0 = 0, dn, ew, tr = null;
   const hash = (i, k) => {
     let x = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((k + 0x632be5ab) | 0, 0xc2b2ae35);
     x ^= x >>> 15; x = Math.imul(x, 0x27d4eb2d); x ^= x >>> 13;
@@ -534,7 +534,7 @@ const Glyphs = (() => {
   }
   function readColors(){
     const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
-    col = {real: '#ece7d8', fast: v('--pink'), slow: v('--dim'), p: v('--pink'), i: v('--star'), u: v('--violet')};
+    col = {real: '#ece7d8', fast: v('--pink'), slow: v('--dim'), p: v('--pink'), i: v('--star'), u: v('--violet'), night: v('--night')};
   }
   // 字模图集：每种颜色的每个字只用 fillText 画一次，之后每帧都是从图集里贴图。
   // 每帧几千次 fillText（汉字更重）在有的机器上越画越卡，贴图便宜得多。
@@ -599,6 +599,17 @@ const Glyphs = (() => {
     }
     for(let i=0; i<n; i++){ th[i] = CFG.thMin + Math.random()*(CFG.thMax - CFG.thMin); ph[i] = Math.random()*10; }
     for(let i=0; i<n; i++) if(real[i] === CONT) th[i] = th[i - 1];     // 汉字两格同进同退
+    // 转场用：每格一个"溶解早晚"的偏移（粗块噪声 + 每格抖动，边缘才会有飞出去的小方块），和 1～3 格的粉色乱码边宽
+    dn = new Float32Array(n); ew = new Uint8Array(n);
+    const S5 = 5, lat = (a, b) => (hash(a*7919 + b, 3) % 1000)/1000;
+    for(let j=0; j<rows; j++) for(let i=0; i<cols; i++){
+      const gx = i/S5, gy = j/S5, ix = Math.floor(gx), iy = Math.floor(gy), fx = gx - ix, fy = gy - iy;
+      const a = lat(ix, iy), b = lat(ix + 1, iy), c = lat(ix, iy + 1), d = lat(ix + 1, iy + 1);
+      const v = (a*(1 - fx) + b*fx)*(1 - fy) + (c*(1 - fx) + d*fx)*fy;
+      const o = j*cols + i;
+      dn[o] = v*9 + (hash(o, 5) % 1000)/1000*4;
+      ew[o] = 1 + hash(o, 9) % 3;
+    }
     sqSpan.forEach(([a, b], r) => { const j = sqR0 + r; if(j < 0 || j >= rows) return;
       for(let i = sqC0 + a; i <= sqC0 + b; i++) if(i >= 0 && i < cols) mask[j*cols + i] = 1; });
     sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, slowCv.width, slowCv.height);
@@ -648,6 +659,7 @@ const Glyphs = (() => {
       slowK[o] = k;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+    if(tr){ ctx.fillStyle = col.night; ctx.fillRect(0, 0, cv.width, cv.height); }
     ctx.globalAlpha = CFG.dimAlpha; ctx.drawImage(slowCv, 0, 0); ctx.globalAlpha = 1;
     ctx.globalAlpha = 0.6;                       // 接近阈值：快速跳动的粉色乱码
     for(let o=0; o<n; o++){
@@ -668,12 +680,60 @@ const Glyphs = (() => {
     SQG[sqFrame].forEach((line, r) => line.forEach(([c, k], i) => {
       if(c !== ' ') blit(ctx, k, c, x0 + (sqC0 + i)*cw, y0 + (sqR0 + r)*chh);
     }));
+    if(tr) drawDissolve(fastK);
+  }
+  // 转场：加载文字先拍成快照画进这一层，然后从底部往上溶解。
+  // 每格的"高度" = 离底边几行 + 噪声偏移；溶解线扫过后格子透明（露出舞台），线前 1～3 格是粉色快乱码。
+  function snapText(){
+    const out = [], r0 = cv.getBoundingClientRect();
+    splash.querySelectorAll('.load, .go').forEach(el => {
+      const b = el.getBoundingClientRect(); if(!b.width) return;
+      const box = {x: b.left - r0.left, y: b.top - r0.top, w: b.width, h: b.height, runs: []};
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for(let nd; (nd = walk.nextNode());){
+        if(!nd.data.trim()) continue;
+        const rg = document.createRange(); rg.selectNodeContents(nd); const q = rg.getBoundingClientRect();
+        box.runs.push({t: nd.data, x: q.left - r0.left, y: q.top - r0.top, h: q.height, c: getComputedStyle(nd.parentElement).color});
+      }
+      out.push(box);
+    });
+    return out;
+  }
+  function drawDissolve(fastK){
+    const cw = CFG.cellW, chh = CFG.cellH;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = CFG.font; ctx.textBaseline = 'middle';
+    for(const b of tr.text){
+      ctx.fillStyle = col.night; ctx.fillRect(b.x, b.y, b.w, b.h);
+      for(const r of b.runs){ ctx.fillStyle = r.c; ctx.fillText(r.t, r.x, Math.round(r.y + r.h/2)); }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const p = Math.min(1, (performance.now() - tr.t0)/tr.dur), e = p*p*(3 - 2*p)*.35 + p*.65;
+    const F = -4 + e*(rows + 20);
+    ctx.globalAlpha = 0.9;
+    for(let j=0; j<rows; j++){
+      const up = rows - 1 - j, y = (y0 + j*chh)*dpr;
+      let runStart = -1;
+      for(let i=0; i<=cols; i++){
+        const o = j*cols + i, k = i < cols ? up + dn[o] : 1e9;
+        const gone = k < F - ew[o];
+        if(gone && runStart < 0) runStart = i;
+        if(!gone && runStart >= 0){ ctx.clearRect((x0 + runStart*cw)*dpr, y, (i - runStart)*cw*dpr, chh*dpr); runStart = -1; }
+        if(i < cols && !gone && k < F){             // 溶解线：粉色快乱码
+          const x = x0 + i*cw;
+          ctx.globalAlpha = 1; ctx.fillStyle = col.night; ctx.fillRect(x*dpr, y, cw*dpr, chh*dpr);
+          ctx.globalAlpha = 0.9; blit(ctx, 'fast', CH[hash(o, fastK) % CH.length], x, y0 + j*chh);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    if(p >= 1){ const cb = tr.cb; tr = null; cb(); }
   }
   function frame(ts){
     if(!running) return;
     requestAnimationFrame(frame);
     if(document.hidden){ last = ts; return; }
-    if(ts - last < 1000/CFG.fps - 1) return;
+    if(!tr && ts - last < 1000/CFG.fps - 1) return;
     const dt = Math.min(0.06, (ts - last)/1000 || 0.016); last = ts;
     if(!reduced()) step(dt);
     draw();
@@ -690,13 +750,19 @@ const Glyphs = (() => {
       // 明确要求加载像素字，加载完再重做一次字模图（Safari 不会因为画布要用就自己去加载字体）
       if(document.fonts) document.fonts.load(CFG.font, '鼓Ag').catch(() => {}).then(() => { if(running){ atlas = null; build(); } });
     },
-    stop(){ running = false; cv.width = cv.height = slowCv.width = slowCv.height = atlasCv.width = atlasCv.height = 0; atlas = null; },   // 进了主界面就把两张大画布的显存还回去
+    dissolve(cb){
+      if(!running || reduced() || !dn){ splash.classList.add('bye'); cb(); return; }
+      tr = {t0: performance.now(), dur: 1100, cb, text: snapText()};
+      pointer = null; splash.classList.add('bye');
+    },
+    stop(){ running = false; tr = null; cv.width = cv.height = slowCv.width = slowCv.height = atlasCv.width = atlasCv.height = 0; atlas = null; },   // 进了主界面就把两张大画布的显存还回去
   };
 })();
 
 S.play(false);       // 开场时先别打，开场结束再开始
 function runSplash(){
-  S.hold(true);        // 开场页盖住舞台时，舞台不渲染
+  // 开场页盖住舞台时，舞台不渲染；先让它画两帧，把着色器编译好，转场时露出来才不会卡一下
+  requestAnimationFrame(() => requestAnimationFrame(() => { if(!splash.classList.contains('bye')) S.hold(true); }));
   Glyphs.start();
   const dur = reduced() ? 200 : 1800, t0 = performance.now(); let f = 0, want = '';
   const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
@@ -733,8 +799,7 @@ function waitStart(){
 }
 function done(){
   S.hold(false);
-  splash.classList.add('bye');
-  setTimeout(() => { splash.hidden = true; Glyphs.stop(); }, 650);
+  Glyphs.dissolve(() => { splash.hidden = true; Glyphs.stop(); });
   reveal($('#logoT'), 'Squiddle', {from: '########', dur: 700, force: true});
   reveal(camT, S.camera(), {from: blank(S.camera()), dur: 600, delay: 200, force: true});
   showSong(S.song(), true);

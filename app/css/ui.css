@@ -249,12 +249,12 @@ kbd{font-family:var(--f);font-size:12px;color:var(--mist);padding:0 4px;border:1
 @keyframes tout{to{opacity:0;transform:translateY(8px)}}
 
 /* ---------- 开场 ---------- */
-.splash{position:absolute;inset:var(--tb) 0 0 0;z-index:20;background:var(--night);display:grid;place-items:center;transition:opacity .45s var(--out)}
-.splash.bye{opacity:0;pointer-events:none}
+.splash{position:absolute;inset:var(--tb) 0 0 0;z-index:20;background:var(--night);display:grid;place-items:center}
+/* 转场：底色和文字都改由字符格那层画，再从底部一格一格溶解掉 */
+.splash.bye{background:transparent;pointer-events:none}
+.splash.bye .box{visibility:hidden}
 .splash .glyphs{position:absolute;inset:0;width:100%;height:100%;display:block}
 .splash .box{position:relative;display:grid;justify-items:center;gap:8px;transition:transform .6s var(--out)}
-.splash .glyphs{transition:transform .6s var(--out)}
-.splash.bye .box,.splash.bye .glyphs{transform:translateY(-26px) scale(.94)}
 .sq{display:block}         /* 鱿鱼本身画在背景的字符格里，这里只占位 */
 .load{font-family:var(--f);font-size:12px;line-height:16px;color:var(--mist);white-space:pre;background:var(--night);padding:3px 8px}
 .load b{font-weight:400;color:var(--pale)}
