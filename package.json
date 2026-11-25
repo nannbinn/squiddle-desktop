@@ -1,0 +1,66 @@
+{
+  "name": "squiddle",
+  "productName": "Squiddle",
+  "version": "0.1.0",
+  "description": "Squiddle 星空鼓手",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "prepare-web": "node scripts/prepare.js",
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --publish never",
+    "dist:zip": "electron-builder --win dir --x64 --publish never && node scripts/zip-win.js"
+  },
+  "devDependencies": {
+    "@fontsource/silkscreen": "5.3.0",
+    "@fontsource/zcool-qingke-huangyou": "5.3.0",
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0",
+    "three": "0.128.0"
+  },
+  "build": {
+    "appId": "app.squiddle.desktop",
+    "productName": "Squiddle",
+    "copyright": "Squiddle",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "app/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Squiddle-Setup-${version}.${ext}",
+      "shortcutName": "Squiddle"
+    },
+    "portable": {
+      "artifactName": "Squiddle-${version}-portable.${ext}"
+    },
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ]
+  }
+}
