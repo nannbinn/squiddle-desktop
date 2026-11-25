@@ -536,6 +536,33 @@ const Glyphs = (() => {
     const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
     col = {real: '#ece7d8', fast: v('--pink'), slow: v('--dim'), p: v('--pink'), i: v('--star'), u: v('--violet')};
   }
+  // 字模图集：每种颜色的每个字只用 fillText 画一次，之后每帧都是从图集里贴图。
+  // 每帧几千次 fillText（汉字更重）在有的机器上越画越卡，贴图便宜得多。
+  const atlasCv = document.createElement('canvas'), actx2 = atlasCv.getContext('2d');
+  let atlas = null, atlasKey = '';
+  function buildAtlas(){
+    const fontOk = !document.fonts || document.fonts.check(CFG.font, '鼓A');
+    const key = dpr + '|' + fontOk;
+    if(atlas && atlasKey === key) return;
+    const sets = {slow: CH, fast: CH, real: '', p: '', i: '', u: ''};
+    sets.real = [...new Set(STORY)].filter(c => c !== ' ' && c !== '　').join('');
+    SQG.flat(2).forEach(([c, k]) => { if(c !== ' ' && !sets[k].includes(c)) sets[k] += c; });
+    const cw = CFG.cellW*dpr, chh = CFG.cellH*dpr, perRow = 48, list = [];
+    for(const k in sets) for(const c of sets[k]) list.push([k, c]);
+    atlasCv.width = perRow*cw*2; atlasCv.height = Math.ceil(list.length/perRow)*chh;
+    actx2.font = `${12*dpr}px "Fusion Pixel 12px Proportional SC"`; actx2.textBaseline = 'top';
+    atlas = new Map();
+    list.forEach(([k, c], idx) => {
+      const sx = (idx % perRow)*cw*2, sy = Math.floor(idx/perRow)*chh;
+      actx2.fillStyle = col[k]; actx2.fillText(c, sx, sy + dpr);
+      atlas.set(k + c, [sx, sy, (wide(c) ? 2 : 1)*cw]);
+    });
+    atlasKey = key;
+  }
+  function blit(c2, k, c, x, y){        // x、y 是 CSS 像素，画到设备像素上
+    const g = atlas.get(k + c); if(!g) return;
+    c2.drawImage(atlasCv, g[0], g[1], g[2], CFG.cellH*dpr, x*dpr, y*dpr, g[2], CFG.cellH*dpr);
+  }
   function build(){
     const r = splash.getBoundingClientRect();
     dpr = Math.max(1, Math.round(window.devicePixelRatio || 1)); W = r.width; H = r.height;
@@ -568,7 +595,10 @@ const Glyphs = (() => {
     for(let i=0; i<n; i++) if(real[i] === CONT) th[i] = th[i - 1];     // 汉字两格同进同退
     sqSpan.forEach(([a, b], r) => { const j = sqR0 + r; if(j < 0 || j >= rows) return;
       for(let i = sqC0 + a; i <= sqC0 + b; i++) if(i >= 0 && i < cols) mask[j*cols + i] = 1; });
-    sctx.setTransform(dpr, 0, 0, dpr, 0, 0); sctx.clearRect(0, 0, W, H);
+    sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, slowCv.width, slowCv.height);
+    ctx.imageSmoothingEnabled = sctx.imageSmoothingEnabled = false;
+    rect = r;
+    buildAtlas();
     return true;
   }
   function target(x, y, p){
@@ -603,37 +633,34 @@ const Glyphs = (() => {
   function draw(){
     const cw = CFG.cellW, chh = CFG.cellH, fastK = Math.floor(t*CFG.fastHz);
     // 慢乱码：画在一张常驻的底图上，每帧只重画换了字的格子
-    sctx.font = CFG.font; sctx.textBaseline = 'top'; sctx.fillStyle = col.slow;
     for(let o=0; o<n; o++){
       const x = x0 + (o % cols)*cw, y = y0 + ((o/cols) | 0)*chh;
       const k = (!mask[o] && h[o] <= th[o] - CFG.band) ? Math.floor(t*CFG.slowHz + ph[o]) : -1;
       if(k === slowK[o]) continue;
-      sctx.clearRect(x, y, cw, chh);
-      if(k >= 0) sctx.fillText(CH[hash(o, k) % CH.length], x, y + 1);
+      sctx.clearRect(x*dpr, y*dpr, cw*dpr, chh*dpr);
+      if(k >= 0) blit(sctx, 'slow', CH[hash(o, k) % CH.length], x, y);
       slowK[o] = k;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.globalAlpha = CFG.dimAlpha; ctx.drawImage(slowCv, 0, 0); ctx.globalAlpha = 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = CFG.font; ctx.textBaseline = 'top';
-    ctx.fillStyle = col.fast; ctx.globalAlpha = 0.6;                       // 接近阈值：快速跳动的粉色乱码
+    ctx.globalAlpha = 0.6;                       // 接近阈值：快速跳动的粉色乱码
     for(let o=0; o<n; o++){
       if(mask[o] || h[o] <= th[o] - CFG.band) continue;
       const shown = h[o] > th[o] && real[o] !== CONT;
       const lead = real[o] === CONT && h[o - 1] > th[o - 1];
       if(shown || lead) continue;
-      ctx.fillText(CH[hash(o, fastK) % CH.length], x0 + (o % cols)*cw, y0 + ((o/cols) | 0)*chh + 1);
+      blit(ctx, 'fast', CH[hash(o, fastK) % CH.length], x0 + (o % cols)*cw, y0 + ((o/cols) | 0)*chh);
     }
-    ctx.fillStyle = col.real;                                              // 超过阈值：真实的故事小字
+                                                                           // 超过阈值：真实的故事小字
     for(let o=0; o<n; o++){
       if(mask[o] || h[o] <= th[o] || real[o] === ' ' || real[o] === CONT || real[o] === '　') continue;
       ctx.globalAlpha = Math.min(1, 0.5 + (h[o] - th[o])*1.5);
-      ctx.fillText(real[o], x0 + (o % cols)*cw, y0 + ((o/cols) | 0)*chh + 1);
+      blit(ctx, 'real', real[o], x0 + (o % cols)*cw, y0 + ((o/cols) | 0)*chh);
     }
     ctx.globalAlpha = 1;
     // 鱿鱼：嵌在同一层格子里，不受乱码影响
     SQG[sqFrame].forEach((line, r) => line.forEach(([c, k], i) => {
-      if(c === ' ') return; ctx.fillStyle = col[k];
-      ctx.fillText(c, x0 + (sqC0 + i)*cw, y0 + (sqR0 + r)*chh + 1);
+      if(c !== ' ') blit(ctx, k, c, x0 + (sqC0 + i)*cw, y0 + (sqR0 + r)*chh);
     }));
   }
   function frame(ts){
@@ -645,14 +672,15 @@ const Glyphs = (() => {
     if(!reduced()) step(dt);
     draw();
   }
-  splash.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); pointer = {x: e.clientX - r.left, y: e.clientY - r.top, at: performance.now()}; });
+  let rect = null;
+  splash.addEventListener('pointermove', e => { if(rect) pointer = {x: e.clientX - rect.left, y: e.clientY - rect.top, at: performance.now()}; });
   splash.addEventListener('pointerleave', () => { pointer = null; });
   // 开场框的大小一变（字体加载、提示行出现），鱿鱼占位框就会挪，格子要跟着重新对齐
   if(window.ResizeObserver) new ResizeObserver(() => { if(running) build(); }).observe(splash.querySelector('.box'));
   addEventListener('resize', () => { if(running) build(); });
   return {
     start(){ readColors(); if(!build()) return; running = true; requestAnimationFrame(frame); if(document.fonts) document.fonts.ready.then(() => running && build()); },
-    stop(){ running = false; cv.width = cv.height = slowCv.width = slowCv.height = 0; },   // 进了主界面就把两张大画布的显存还回去
+    stop(){ running = false; cv.width = cv.height = slowCv.width = slowCv.height = atlasCv.width = atlasCv.height = 0; atlas = null; },   // 进了主界面就把两张大画布的显存还回去
   };
 })();
 
