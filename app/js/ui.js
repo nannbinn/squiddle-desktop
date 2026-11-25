@@ -491,9 +491,29 @@ function runSplash(){
     if(st !== want){ want = st; reveal(loadStep, st, {from: loadStep.textContent || blank(st), dur: 300, band: .5, force: true}); }
     loadBar.innerHTML = `  [<b>${'#'.repeat(n)}</b>${'.'.repeat(20 - n)}] ${String(Math.round(p*100)).padStart(3)}%`;
     if(p < 1) setTimeout(tick, 170);
-    else fontsReady.then(() => setTimeout(done, 200));
+    else fontsReady.then(() => setTimeout(desk ? done : waitStart, 200));
   };
   tick();
+}
+// 网页里打开：浏览器要先有一次点击或按键才肯出声，所以停在开场页等一下
+function waitStart(){
+  const go = $('#go'), msg = '> 按任意处开始 <';
+  let f = 0, alive = true;
+  const bob = () => { if(!alive) return; sq.innerHTML = SQ[f++ % 3].join('\n'); setTimeout(bob, 170); };
+  bob();
+  reveal(loadStep, '准备好了', {from: loadStep.textContent, dur: 300, band: .5, force: true});
+  go.hidden = false; reveal(go, msg, {from: blank(msg), dur: 500, force: true});
+  splash.classList.add('wait');
+  const start = e => {
+    if(e.type === 'keydown' && (e.repeat || /^(Shift|Control|Alt|Meta|Tab|F\d+)$/.test(e.key))) return;
+    if(e.type === 'pointerup' && e.button > 0) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    removeEventListener('pointerup', start, true); removeEventListener('keydown', start, true);
+    alive = false; splash.classList.remove('wait');
+    S.unlockAudio();
+    done();
+  };
+  addEventListener('pointerup', start, true); addEventListener('keydown', start, true);
 }
 function done(){
   splash.classList.add('bye');
@@ -502,11 +522,7 @@ function done(){
   reveal(camT, S.camera(), {from: blank(S.camera()), dur: 600, delay: 200, force: true});
   showSong(S.song(), true);
   syncBars(); placeInd();
-  if(desk){ S.play(true); }
-  else {                                       // 网页里打开：浏览器要先点一下才出声
-    const b = $('#start'); b.hidden = false;
-    b.onclick = () => { S.unlockAudio(); S.play(true); b.hidden = true; };
-  }
+  S.play(true);
 }
 
 /* ---------- 每帧：电平、进度、时间、帧率、粒子 ---------- */
