@@ -547,15 +547,21 @@ const Glyphs = (() => {
     const sets = {slow: CH, fast: CH, real: '', p: '', i: '', u: ''};
     sets.real = [...new Set(STORY)].filter(c => c !== ' ' && c !== '　').join('');
     SQG.flat(2).forEach(([c, k]) => { if(c !== ' ' && !sets[k].includes(c)) sets[k] += c; });
-    const cw = CFG.cellW*dpr, chh = CFG.cellH*dpr, perRow = 48, list = [];
+    // 每个字一个槽，槽和槽之间留空，画字时裁在自己的槽里：Safari 和 Chrome 的文字基线不一样，不留空就会把邻字的边带进来
+    const cw = CFG.cellW*dpr, chh = CFG.cellH*dpr, perRow = 48, list = [], px = cw*2 + 4*dpr, py = chh + 6*dpr;
     for(const k in sets) for(const c of sets[k]) list.push([k, c]);
-    atlasCv.width = perRow*cw*2; atlasCv.height = Math.ceil(list.length/perRow)*chh;
-    actx2.font = `${12*dpr}px "Fusion Pixel 12px Proportional SC"`; actx2.textBaseline = 'top';
+    atlasCv.width = perRow*px; atlasCv.height = Math.ceil(list.length/perRow)*py;
+    actx2.font = `${12*dpr}px "Fusion Pixel 12px Proportional SC"`; actx2.textBaseline = 'alphabetic';
+    // 基线位置按字体自己报的上下高度算，让字身在格子里竖直居中，两种浏览器就对得上
+    const m = actx2.measureText('鼓Ag'), asc = m.fontBoundingBoxAscent || 11*dpr, desc = m.fontBoundingBoxDescent || 2*dpr;
+    const base = Math.round((chh - (asc + desc))/2 + asc);
     atlas = new Map();
     list.forEach(([k, c], idx) => {
-      const sx = (idx % perRow)*cw*2, sy = Math.floor(idx/perRow)*chh;
-      actx2.fillStyle = col[k]; actx2.fillText(c, sx, sy + dpr);
-      atlas.set(k + c, [sx, sy, (wide(c) ? 2 : 1)*cw]);
+      const sx = (idx % perRow)*px, sy = Math.floor(idx/perRow)*py, w = (wide(c) ? 2 : 1)*cw;
+      actx2.save(); actx2.beginPath(); actx2.rect(sx, sy, w, chh); actx2.clip();
+      actx2.fillStyle = col[k]; actx2.fillText(c, sx, sy + base);
+      actx2.restore();
+      atlas.set(k + c, [sx, sy, w]);
     });
     atlasKey = key;
   }
