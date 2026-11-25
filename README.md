@@ -25,6 +25,7 @@ xvfb-run -a -s "-screen 0 1400x1000x24" node scripts/smoke.js out/smoke   # 冒�
 
 - `npm run dist`：安装版 `Squiddle-Setup-<版本>.exe` + 免安装版 `Squiddle-<版本>-portable.exe`（需在 Windows 上，或 Linux 装 32 位 wine）
 - `npm run dist:zip`：解压即用的 `Squiddle-<版本>-win-x64.zip`（Linux 上也能打）
+- `npm run build-web`：网页单文件 `dist/Squiddle-web.html`，脚本、样式、字体全部内嵌，双击用浏览器打开就能玩（先跑一次 `prepare-web`）
 - 推送到 GitHub 后，Actions 在 Windows 机器上自动打包；打 `v*` 标签会发布到 Releases。
 
 ## 第三方
