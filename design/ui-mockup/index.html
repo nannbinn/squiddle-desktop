@@ -1,0 +1,867 @@
+<title>Squiddle 界面小样</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=VT323&family=ZCOOL+QingKe+HuangYou&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: dark;
+  --night:#242655; --deep:#1a1c3e; --panel:#2c2f64; --panel2:#383c7c; --raise:#42468d;
+  --hair:#9791d7; --hair-dim:rgba(151,145,215,.32); --shadow:#141634;
+  --pink:#f083a5; --pink-d:#c65f83; --pale:#f2e396; --star:#e7c03c; --plum:#93407f; --violet:#a58df1; --ink:#1a142a;
+  --fg:#dcd4fa; --mist:#aaa6dc; --dim:#827eb8;
+  --f-pixel:"Silkscreen",ui-monospace,monospace;
+  --f-ascii:"VT323",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --f-cn:"ZCOOL QingKe HuangYou","Microsoft YaHei","PingFang SC",sans-serif;
+  --f-ui:system-ui,"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;
+  --out:cubic-bezier(.22,1,.36,1); --inn:cubic-bezier(.55,0,1,.45); --spring:cubic-bezier(.34,1.4,.64,1);
+  --tb:36px; --drawer:340px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--night);color:var(--fg);font-family:var(--f-ui)}
+body{min-height:100vh;overflow-x:hidden;
+  padding:24px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pale);outline-offset:2px}
+
+/* starfield behind everything */
+#sky{position:fixed;inset:0;pointer-events:none;z-index:0}
+#sky i{position:absolute;width:2px;height:2px;background:#b4aef5;opacity:.5}
+#sky b{position:absolute;width:7px;height:7px;opacity:.9;animation:tw 3.2s steps(4) infinite;
+  background:linear-gradient(var(--star),var(--star)) center/1px 7px no-repeat,linear-gradient(var(--star),var(--star)) center/7px 1px no-repeat}
+@keyframes tw{0%,100%{opacity:.95}50%{opacity:.25}}
+
+/* page chrome around the mockup (not part of the app) */
+.strip{position:relative;z-index:1;max-width:1200px;margin:0 auto 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-family:var(--f-ascii);font-size:19px;color:var(--mist)}
+.strip .tag{color:var(--pale)}
+.strip .sp{flex:1}
+.chip{appearance:none;border:1px solid var(--hair-dim);background:transparent;border-radius:0;padding:3px 10px;cursor:pointer;
+  font-family:var(--f-ascii);font-size:18px;color:var(--mist);transition:color .15s,border-color .15s,background .15s}
+.chip:hover{color:var(--fg);border-color:var(--hair)}
+.chip[aria-pressed="true"]{background:var(--pale);color:var(--ink);border-color:var(--pale)}
+.keys{position:relative;z-index:1;max-width:1200px;margin:14px auto 0;font-family:var(--f-ascii);font-size:18px;color:var(--dim);
+  display:flex;gap:6px 18px;flex-wrap:wrap}
+.keys kbd{font-family:inherit;color:var(--pale);border:1px solid var(--hair-dim);padding:0 5px;margin-right:4px}
+
+/* ======== the app window ======== */
+.win{position:relative;z-index:1;max-width:1200px;margin:0 auto;background:var(--deep);
+  border:1px solid var(--hair);box-shadow:0 0 0 1px var(--shadow),10px 12px 0 rgba(12,12,34,.55);overflow:hidden;
+  transition:box-shadow .3s}
+.win.full{position:fixed;inset:0;max-width:none;margin:0;z-index:50;display:flex;flex-direction:column;box-shadow:none;border:0}
+.win.full .stagewrap{flex:1;min-height:0}
+.win.full .stage{aspect-ratio:auto;height:100%}
+
+/* titlebar */
+.tb{height:var(--tb);display:flex;align-items:center;gap:14px;padding:0 0 0 12px;background:var(--night);
+  border-bottom:1px solid var(--hair-dim);user-select:none;position:relative;z-index:6}
+.logo{font-family:var(--f-pixel);font-weight:700;font-size:17px;letter-spacing:.5px;color:var(--pink);display:flex;align-items:center;gap:6px;
+  text-shadow:1px 1px 0 var(--ink),2px 2px 0 #4e4698}
+.logo .s{width:9px;height:9px;display:inline-block;animation:spin 6s linear infinite;
+  background:linear-gradient(var(--star),var(--star)) center/1px 9px no-repeat,linear-gradient(var(--star),var(--star)) center/9px 1px no-repeat}
+@keyframes spin{to{transform:rotate(360deg)}}
+.meter{font-family:var(--f-ascii);font-size:20px;line-height:1;color:var(--violet);white-space:pre;letter-spacing:1px}
+.meter em{font-style:normal;color:var(--pale)}
+.tb .now{font-family:var(--f-ascii);font-size:19px;color:var(--mist);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.wbtns{display:flex;height:100%}
+.wbtns button{white-space:nowrap;appearance:none;border:0;background:transparent;width:44px;height:100%;cursor:pointer;font-family:var(--f-ascii);font-size:22px;color:var(--mist);
+  transition:background .12s,color .12s}
+.wbtns button:hover{background:var(--panel2);color:var(--fg)}
+.wbtns .x:hover{background:var(--pink-d);color:#fff}
+
+/* stage */
+.stagewrap{position:relative;overflow:hidden}
+.stage{position:relative;aspect-ratio:16/9;background:#fff;cursor:crosshair;overflow:hidden}
+.stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;image-rendering:pixelated;display:block;user-select:none;-webkit-user-drag:none}
+.cam{position:absolute;left:14px;top:12px;font-family:var(--f-ascii);font-size:20px;color:#6a659a;letter-spacing:1px;white-space:pre;pointer-events:none}
+.cam.live{color:var(--pink-d)}
+.spark{position:absolute;font-family:var(--f-ascii);font-size:22px;line-height:1;pointer-events:none;will-change:transform,opacity}
+.dropveil{position:absolute;inset:0;display:grid;place-items:center;background:rgba(36,38,85,.55);opacity:0;pointer-events:none;transition:opacity .2s var(--out);
+  font-family:var(--f-ascii);font-size:26px;color:var(--pale)}
+.win.dragging .dropveil{opacity:1}
+
+/* drawer */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(var(--drawer),88%);background:rgba(26,28,62,.94);
+  border-left:1px solid var(--hair);display:flex;flex-direction:column;z-index:5;
+  transform:translateX(102%);visibility:hidden;transition:transform .24s var(--inn),visibility 0s .24s}
+.drawer.open{transform:none;visibility:visible;transition:transform .42s var(--out),visibility 0s}
+@supports (backdrop-filter:blur(6px)){.drawer{background:rgba(26,28,62,.93);backdrop-filter:blur(8px)}}
+.tabs{position:relative;display:flex;border-bottom:1px solid var(--hair-dim);flex:none}
+.tabs button{appearance:none;border:0;background:transparent;flex:1;padding:12px 4px 11px;cursor:pointer;font-family:var(--f-cn);font-size:17px;color:var(--mist);transition:color .2s}
+.tabs button[aria-selected="true"]{color:var(--fg)}
+.tabs button:hover{color:var(--fg)}
+.tabs .ind{position:absolute;left:0;bottom:-1px;height:3px;background:var(--pink);width:0;transition:transform .38s var(--out),width .38s var(--out)}
+.tabs .close{flex:none;width:40px;font-family:var(--f-ascii);font-size:22px}
+.panes{position:relative;flex:1;min-height:0}
+.pane{position:absolute;inset:0;overflow:auto;padding:16px;opacity:0;visibility:hidden;transform:translateX(var(--from,12px));
+  transition:opacity .18s,transform .18s,visibility 0s .18s}
+.pane.on{opacity:1;visibility:visible;transform:none;transition:opacity .3s var(--out) .04s,transform .38s var(--out) .04s,visibility 0s}
+.pane::-webkit-scrollbar{width:8px}.pane::-webkit-scrollbar-thumb{background:var(--panel2)}
+.drawer.open .pane.on > *{animation:rise .45s var(--out) both}
+.drawer.open .pane.on > *:nth-child(2){animation-delay:.04s}
+.drawer.open .pane.on > *:nth-child(3){animation-delay:.08s}
+.drawer.open .pane.on > *:nth-child(4){animation-delay:.12s}
+.drawer.open .pane.on > *:nth-child(n+5){animation-delay:.16s}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.h{font-family:var(--f-ascii);font-size:18px;color:var(--dim);margin:0 0 8px;letter-spacing:1px}
+
+/* library */
+.drop{position:relative;height:104px;margin-bottom:16px;cursor:pointer;border:1px dashed var(--hair-dim);transition:border-color .2s,background .2s}
+.drop .in{position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:4px;pointer-events:none}
+.drop .in b{font-family:var(--f-cn);font-weight:400;font-size:18px;color:var(--fg)}
+.drop .in span{font-family:var(--f-ascii);font-size:18px;color:var(--dim)}
+.drop:hover{border-color:var(--hair);background:rgba(255,255,255,.02)}
+.win.dragging .drop{border-color:var(--pink);background:rgba(255,255,255,.04)}
+.songs{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.song{display:grid;grid-template-rows:1fr;transition:grid-template-rows .3s var(--out),opacity .25s,margin .3s}
+.song.gone{grid-template-rows:0fr;opacity:0;margin-top:-6px}
+.song.new{animation:pop .5s var(--spring) both}
+@keyframes pop{from{opacity:0;transform:translateX(16px) scale(.97)}}
+.song > div{overflow:hidden;min-height:0}
+.row{display:flex;align-items:center;gap:10px;padding:9px 8px 9px 10px;background:var(--panel);border:1px solid transparent;cursor:pointer;
+  transition:background .15s,border-color .15s,transform .12s}
+.row:hover{background:var(--panel2)}
+.row:active{transform:scale(.985)}
+.song.cur .row{border-color:var(--pink);background:var(--panel2)}
+.row .eq{font-family:var(--f-ascii);font-size:18px;color:var(--pink);width:3ch;white-space:pre;flex:none}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{font-size:12px;color:var(--mist)}
+.row .rm{appearance:none;border:0;background:transparent;font-family:var(--f-ascii);font-size:20px;color:var(--dim);cursor:pointer;padding:0 4px;opacity:0;transition:opacity .15s,color .15s}
+.row:hover .rm,.row:focus-within .rm{opacity:1}
+.row .rm:hover{color:var(--pink)}
+.empty{display:none;text-align:center;padding:14px 0;color:var(--dim)}
+.empty pre{font-family:var(--f-ascii);font-size:20px;line-height:20px;margin:0 0 6px;color:var(--violet)}
+.songs:empty + .empty{display:block}
+
+/* adjust */
+.ctl{display:grid;grid-template-columns:5.5em 1fr 3.4em;align-items:center;gap:10px;margin-bottom:14px;font-size:14px;color:var(--mist)}
+.ctl .pbar{height:10px}
+.ctl output{font-family:var(--f-pixel);font-size:12px;color:var(--fg);text-align:right;font-variant-numeric:tabular-nums}
+/* pixel bar: cells via mask, filled part plum -> pink -> white, knob only on hover */
+.pbar{position:relative;height:10px;--pitch:7px;--cell:5px;touch-action:none}
+.pbar .cells,.pbar .fill{position:absolute;left:0;top:0;bottom:0;pointer-events:none;
+  -webkit-mask:repeating-linear-gradient(90deg,#000 0 var(--cell),transparent 0 var(--pitch));
+          mask:repeating-linear-gradient(90deg,#000 0 var(--cell),transparent 0 var(--pitch))}
+.pbar .cells{right:0;background:var(--panel2);transition:background .2s}
+.pbar:hover .cells{background:var(--raise)}
+.pbar .fill{width:0;background:linear-gradient(90deg,var(--plum),var(--pink) 72%,#fff)}
+.pbar .knob{position:absolute;top:50%;left:0;width:8px;height:16px;background:var(--pale);border:2px solid var(--ink);pointer-events:none;
+  opacity:0;transform:translate(-50%,-50%) scaleY(.3);transition:opacity .15s,transform .25s var(--spring)}
+.pbar:hover .knob,.pbar.drag .knob,.pbar:has(input:focus-visible) .knob{opacity:1;transform:translate(-50%,-50%)}
+.pbar input{position:absolute;left:0;right:0;top:-7px;bottom:-7px;width:100%;height:auto;margin:0;opacity:0;cursor:pointer}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:6px;background:linear-gradient(var(--pink),var(--pink)) 0/var(--p,50%) 100% no-repeat,var(--panel2);border:1px solid var(--hair-dim)}
+input[type=range]::-moz-range-track{height:6px;background:var(--panel2);border:1px solid var(--hair-dim)}
+input[type=range]::-moz-range-progress{height:6px;background:var(--pink)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:16px;margin-top:-6px;background:var(--pale);border:2px solid var(--ink);transition:transform .15s var(--spring)}
+input[type=range]::-moz-range-thumb{width:10px;height:14px;border-radius:0;background:var(--pale);border:2px solid var(--ink)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.25)}
+.seg{position:relative;display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--hair-dim);background:var(--panel);margin-bottom:6px}
+.seg button{appearance:none;border:0;background:transparent;padding:7px 0;cursor:pointer;position:relative;z-index:1;font-size:13px;color:var(--mist);transition:color .2s}
+.seg button[aria-checked="true"]{color:var(--ink)}
+.seg .th{position:absolute;top:0;bottom:0;left:0;width:33.333%;background:var(--pale);transition:transform .35s var(--spring)}
+.fps{display:flex;justify-content:space-between;align-items:baseline;margin:8px 0 18px;font-size:13px;color:var(--mist)}
+.fps output{font-family:var(--f-ascii);font-size:22px;color:var(--pale)}
+.fps .gr{font-family:var(--f-ascii);font-size:18px;color:var(--violet);white-space:pre;letter-spacing:-1px}
+
+/* last hit */
+.spec{font-family:var(--f-ascii);font-size:17px;line-height:13px;margin:0 0 14px;white-space:pre;color:var(--violet);background:var(--deep);border:1px solid var(--hair-dim);padding:10px 8px 8px;overflow:hidden}
+.spec i{font-style:normal;color:var(--pink)}
+.spec u{text-decoration:none;color:var(--pale)}
+.head{display:flex;gap:14px;align-items:center}
+.head pre{font-family:var(--f-ascii);font-size:18px;line-height:15px;margin:0;color:var(--hair);white-space:pre;flex:none}
+.head pre i{font-style:normal;color:var(--star)}
+.head pre u{text-decoration:none;color:var(--pink)}
+.hitinfo{display:grid;gap:6px;font-size:13px;color:var(--mist)}
+.hitinfo b{display:block;font-family:var(--f-cn);font-weight:400;font-size:24px;color:var(--fg);transition:color .3s}
+.hitinfo .v{font-family:var(--f-pixel);font-size:12px;color:var(--fg)}
+/* text reveal: ghost (old/draft) -> glitch band -> final */
+.gh{opacity:.32}
+.gl{color:var(--pink)}
+.gl2{color:var(--violet)}
+
+/* player */
+.player{position:relative;background:var(--panel);border-top:1px solid var(--hair);padding:10px 14px 12px;z-index:6}
+.prow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pbtn{appearance:none;border:1px solid var(--hair-dim);background:var(--panel2);height:36px;min-width:36px;padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  font-size:14px;transition:transform .1s,background .15s,color .15s,border-color .15s}
+.pbtn:hover{background:var(--raise);border-color:var(--hair)}
+.pbtn:active{transform:translateY(1px) scale(.97)}
+.pbtn[aria-pressed="true"]{background:var(--pale);color:var(--ink);border-color:var(--pale)}
+.pbtn svg{width:16px;height:16px;fill:currentColor;flex:none}
+.play{background:var(--pink);color:var(--ink);border-color:var(--pink);width:44px;padding:0;position:relative}
+.play:hover{background:#f295b3;border-color:#f295b3}
+.play svg{position:absolute;transition:transform .3s var(--spring),opacity .2s}
+.play .i-pause{opacity:0;transform:scale(.4) rotate(-90deg)}
+.play.on .i-play{opacity:0;transform:scale(.4) rotate(90deg)}
+.play.on .i-pause{opacity:1;transform:none}
+.ptitle{flex:1;min-width:140px;line-height:1.25}
+.ptitle b{display:block;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptitle span{font-size:12px;color:var(--mist)}
+.time{font-family:var(--f-pixel);font-size:12px;color:var(--fg);font-variant-numeric:tabular-nums;letter-spacing:1px}
+.lane{display:block;width:100%;height:64px;margin-top:10px;border:1px solid var(--hair-dim);background:var(--deep);image-rendering:pixelated;cursor:pointer}
+.ovw{margin-top:8px}
+
+/* toasts */
+.toasts{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;flex-direction:column-reverse;gap:6px;z-index:7;pointer-events:none;width:max-content;max-width:90%}
+.toast{font-family:var(--f-ascii);font-size:20px;color:var(--fg);background:var(--ink);border:1px solid var(--hair);padding:5px 12px;white-space:pre;
+  animation:tin .42s var(--spring) both}
+.toast.out{animation:tout .22s var(--inn) both}
+.toast .k{color:var(--pale)}
+@keyframes tin{from{opacity:0;transform:translateY(16px) scale(.96)}}
+@keyframes tout{to{opacity:0;transform:translateY(8px)}}
+
+/* splash */
+.splash{position:absolute;inset:var(--tb) 0 0 0;z-index:20;background:var(--night);display:grid;place-items:center;transition:opacity .45s var(--out),transform .6s var(--out)}
+.splash.bye{opacity:0;pointer-events:none}
+.splash.bye .sq{transform:translateY(-26px) scale(.92)}
+.splash .box{display:grid;justify-items:center;gap:14px}
+.sq{font-family:var(--f-ascii);font-size:22px;line-height:20px;margin:0;white-space:pre;color:var(--pink);transition:transform .6s var(--out)}
+.sq i{font-style:normal;color:var(--star)}
+.sq u{text-decoration:none;color:var(--violet)}
+.load{font-family:var(--f-ascii);font-size:21px;color:var(--mist);white-space:pre}
+.load b{font-weight:400;color:var(--pale)}
+.appear{opacity:0;transform:translateY(10px)}
+.ready .appear{opacity:1;transform:none;transition:opacity .5s var(--out),transform .6s var(--out)}
+.ready .appear.d1{transition-delay:.05s}.ready .appear.d2{transition-delay:.12s}.ready .appear.d3{transition-delay:.2s}
+
+/* narrow: drawer becomes a bottom sheet */
+@media (max-width:720px){
+  body{padding-top:16px}
+  .win,.strip,.keys{z-index:auto}
+  .meter,.tb .now{display:none}
+  .tb .sp{flex:1}
+  .drawer{position:fixed;top:auto;left:0;right:0;bottom:0;width:auto;height:min(72vh,560px);border-left:0;border-top:1px solid var(--hair);
+    transform:translateY(102%);z-index:60;box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+  .scrim{position:fixed;inset:0;background:rgba(12,12,34,.5);z-index:59;opacity:0;pointer-events:none;transition:opacity .25s}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .ptitle{order:-1;flex-basis:100%}
+  .pbtn .lbl{display:none}
+  .time{margin-left:auto}
+}
+@media (min-width:721px){.scrim{display:none}}
+
+/* reduced motion */
+:root.rm *,:root.rm *::before,:root.rm *::after{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.08s!important;transition-delay:0s!important}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.08s!important;transition-delay:0s!important}
+}
+</style>
+
+<div id="sky" aria-hidden="true"></div>
+
+<div class="strip">
+  <span class="tag">// Squiddle 桌面版 · 界面小样</span><span>不是真程序，舞台是截图</span>
+  <span class="sp"></span>
+  <button class="chip" id="replay" type="button">重播开场</button>
+  <button class="chip" id="rmBtn" type="button" aria-pressed="false">减少动效</button>
+</div>
+
+<div class="win" id="win">
+  <header class="tb">
+    <div class="logo"><span class="s"></span><span id="logoT">Squiddle</span></div>
+    <div class="meter" id="meter" aria-hidden="true"></div>
+    <div class="now" id="tbNow"></div>
+    <span class="sp"></span>
+    <div class="wbtns">
+      <button type="button" aria-label="最小化" title="最小化">_</button>
+      <button type="button" id="maxBtn" aria-label="全屏" title="全屏 (F11)">[]</button>
+      <button type="button" class="x" aria-label="关闭" title="关闭">x</button>
+    </div>
+  </header>
+
+  <div class="stagewrap">
+    <div class="stage appear d1" id="stage">
+      <img src="stage.jpg" alt="鱿鱼鼓手的舞台" draggable="false">
+      <div class="cam" id="cam">用户透视</div>
+      <div class="dropveil">+-- 松手就加到曲目里 --+</div>
+    </div>
+
+    <aside class="drawer" id="drawer" aria-label="菜单">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tab-lib" aria-controls="pane-lib" aria-selected="true">曲目</button>
+        <button role="tab" id="tab-adj" aria-controls="pane-adj" aria-selected="false">调节</button>
+        <button role="tab" id="tab-hit" aria-controls="pane-hit" aria-selected="false">刚才这一下</button>
+        <button class="close" type="button" id="drawerX" aria-label="收起菜单">&gt;</button>
+        <span class="ind" id="ind"></span>
+      </div>
+      <div class="panes">
+        <section class="pane on" id="pane-lib" role="tabpanel" aria-labelledby="tab-lib">
+          <div class="drop" id="drop" role="button" tabindex="0" aria-label="打开文件">
+            <div class="in"><b class="rv">拖歌、MIDI 或鼓谱进来</b><span class="rv">或按 Ctrl+O</span></div>
+          </div>
+          <p class="h rv">// 曲目</p>
+          <ul class="songs" id="songs"></ul>
+          <div class="empty"><pre>  (-.-)  z
+ /|||||\   Z</pre>还没有曲目</div>
+        </section>
+
+        <section class="pane" id="pane-adj" role="tabpanel" aria-labelledby="tab-adj">
+          <p class="h rv">// 演奏</p>
+          <label class="ctl"><span class="rv">速度</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="spd" min="50" max="150" value="100"></span><output>100%</output></label>
+          <label class="ctl"><span class="rv">鼓声</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" min="0" max="100" value="80"></span><output>80</output></label>
+          <label class="ctl"><span class="rv">原曲</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" min="0" max="100" value="60"></span><output>60</output></label>
+          <label class="ctl"><span class="rv">鼓皮张力</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" min="0" max="100" value="50"></span><output>50</output></label>
+          <p class="h rv" style="margin-top:20px">// 帧率上限</p>
+          <div class="seg" role="radiogroup" id="seg">
+            <span class="th" id="segTh"></span>
+            <button role="radio" aria-checked="true" data-cap="0">跟屏幕</button>
+            <button role="radio" aria-checked="false" data-cap="60">60</button>
+            <button role="radio" aria-checked="false" data-cap="30">30</button>
+          </div>
+          <div class="fps"><span>实测 <output id="fpsV">--</output></span><span class="gr" id="fpsGr"></span></div>
+          <button class="pbtn" type="button" id="resetView">重置视角</button>
+        </section>
+
+        <section class="pane" id="pane-hit" role="tabpanel" aria-labelledby="tab-hit">
+          <p class="h rv">// 振动模态</p>
+          <pre class="spec" id="spec" aria-hidden="true"></pre>
+          <div class="head">
+            <pre id="headArt" aria-hidden="true"></pre>
+            <div class="hitinfo">
+              <div><b id="hName">军鼓</b></div>
+              <div>位置 <span class="v" id="hPos">中心</span></div>
+              <div>力度 <span class="v" id="hVel">0.80</span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </aside>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+  </div>
+
+  <footer class="player appear d2">
+    <div class="prow">
+      <button class="pbtn play" id="play" type="button" aria-label="播放/暂停">
+        <svg class="i-play" viewBox="0 0 16 16"><path d="M4 2h2v1h2v1h2v1h2v2h1v2h-1v2h-2v1H8v1H6v1H4z"/></svg>
+        <svg class="i-pause" viewBox="0 0 16 16"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>
+      </button>
+      <button class="pbtn" id="restart" type="button" aria-label="从头"><svg viewBox="0 0 16 16"><path d="M2 2h2v12H2zM12 2h2v12h-2v-1h-2v-1H8v-1H6V9H5V7h1V5h2V4h2V3h2z"/></svg></button>
+      <div class="ptitle"><b id="pTitle">内置节奏 · 两小节</b><span id="pMeta">内置 · 100 BPM · 30 下</span></div>
+      <span class="time" id="time">0:00 / 0:04</span>
+      <button class="pbtn" id="loop" type="button" aria-pressed="true">循环</button>
+      <button class="pbtn" id="dir" type="button" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M1 4h10v8H1zM3 6v4h6V6zM12 6h1V5h2v6h-2v-1h-1z"/></svg><span class="lbl">导播</span></button>
+      <button class="pbtn" id="spot" type="button" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M6 1h4v2H9v2h1v2h1v2h1v2h1v3H3v-3h1V9h1V7h1V5h1V3H6zM6 12h4v-1H6z"/></svg><span class="lbl">聚光灯</span></button>
+      <button class="pbtn" id="menuBtn" type="button" aria-expanded="false" aria-controls="drawer"><svg viewBox="0 0 16 16"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z"/></svg><span class="lbl">菜单</span></button>
+    </div>
+    <canvas class="lane appear d3" id="lane" height="64"></canvas>
+    <div class="pbar ovw appear d3" id="ovw"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="进度"></div>
+  </footer>
+
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="box">
+      <pre class="sq" id="sq"></pre>
+      <div class="load" id="load"></div>
+    </div>
+  </div>
+</div>
+<div class="scrim" id="scrim"></div>
+
+<div class="keys">
+  <span><kbd>空格</kbd>播放/暂停</span><span><kbd>M</kbd>菜单</span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>切页</span>
+  <span><kbd>Esc</kbd>收起</span><span><kbd>F</kbd>全屏（桌面版是 F11）</span><span><kbd>Ctrl+O</kbd>打开</span><span>点舞台 = 打一下</span>
+</div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const mq = matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = () => mq.matches || root.classList.contains('rm');
+const win = $('#win');
+
+/* ---------- starfield ---------- */
+const sky = $('#sky');
+for(let k=0;k<90;k++){ const e=document.createElement('i'); e.style.left=Math.random()*100+'%'; e.style.top=Math.random()*100+'%'; e.style.opacity=(.2+Math.random()*.5).toFixed(2); sky.appendChild(e); }
+for(let k=0;k<14;k++){ const e=document.createElement('b'); e.style.left=Math.random()*100+'%'; e.style.top=Math.random()*100+'%'; e.style.animationDelay=(-Math.random()*3).toFixed(2)+'s'; sky.appendChild(e); }
+
+/* ---------- text reveal ----------
+   Every char gets a threshold = its position (left->right) + a little noise.
+   A sweep m runs past the thresholds: before -> old text (dim), inside the band -> random glyph, after -> new text. */
+const GA = '#%&*+=/<>?~:;!^', GW = '＃％＆＊＋＝／＜＞？～：；！＾';
+const wide = c => /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F]/.test(c);
+const escH = c => c==='<'?'&lt;':c==='>'?'&gt;':c==='&'?'&amp;':c;
+const rvRuns = new WeakMap();
+function reveal(el, text, o={}){
+  const from = o.from !== undefined ? o.from : el.textContent;
+  const dur = o.dur || 560, band = o.band || .22, delay = o.delay || 0;
+  if(reduced() || from === text && !o.force){ el.textContent = text; return; }
+  const n = Math.max(from.length, text.length), th = [];
+  for(let i=0;i<n;i++) th.push((n>1 ? i/(n-1) : 0)*(1-band-.12) + Math.random()*.12);
+  const tok = {}; rvRuns.set(el, tok);
+  const t0 = performance.now() + delay;
+  const step = now => {
+    if(rvRuns.get(el) !== tok) return;
+    const k = Math.max(0, Math.min(1, (now - t0)/dur)), m = 1 - Math.pow(1-k, 3);
+    const tick = Math.floor(now/55);
+    let h = '';
+    for(let i=0;i<n;i++){
+      const a = from[i] || '', b = text[i] || '';
+      const x = (m*(1+band) - th[i]) / band;     // <0 old, 0..1 band, >1 new
+      if(x >= 1){ h += escH(b); continue; }
+      if(x < 0){ h += a ? (a===' ' ? ' ' : '<span class="gh">'+escH(a)+'</span>') : ''; continue; }
+      const ref = b || a; if(!ref || ref===' '){ h += ref; continue; }
+      const pool = wide(ref) ? GW : GA, g = pool[(i*7 + tick*13 + (i*tick)%5) % pool.length];
+      h += '<span class="'+(x<.5?'gl2':'gl')+'">'+escH(g)+'</span>';
+    }
+    el.innerHTML = h;
+    if(k < 1) requestAnimationFrame(step); else el.textContent = text;
+  };
+  requestAnimationFrame(step);
+}
+/* re-reveal every .rv inside a container, staggered top to bottom */
+function revealIn(box){
+  let i = 0;
+  for(const el of box.querySelectorAll('.rv')){
+    if(!el.dataset.rv) el.dataset.rv = el.textContent;
+    const t = el.dataset.rv;
+    reveal(el, t, {from: t.replace(/[^\s]/g, c => wide(c) ? '　' : ' ').replace(/./g, (c,j) => j%3===1 ? (wide(t[j]) ? '＊' : '.') : c), delay: i++*45, dur: 520, force: true});
+  }
+}
+
+/* ---------- songs & pattern ---------- */
+const ROWS = [
+  {key:'crash', name:'吊镲', col:'#e7c03c'},
+  {key:'hat',   name:'踩镲', col:'#f2e396'},
+  {key:'snare', name:'军鼓', col:'#ffffff'},
+  {key:'tom',   name:'嗵鼓', col:'#a58df1'},
+  {key:'kick',  name:'底鼓', col:'#f083a5'},
+];
+function makePattern(seed){
+  let s = seed; const r = () => (s = (s*16807)%2147483647)/2147483647;
+  const p = []; // p[step] = [rowIdx...]
+  for(let i=0;i<32;i++){
+    const a=[]; const b=i%16;
+    if(i===0 || (seed>1 && i===16 && r()>.4)) a.push(0);
+    if(b%2===0 && !(i===0)) a.push(1);
+    if(b===4||b===12) a.push(2);
+    if(i>=28 && i<=30 || (seed>1 && b===14 && r()>.5)) a.push(3);
+    if(b===0||b===6||b===10&&r()>.3||(b===8&&i>=16)) a.push(4);
+    p.push(a);
+  }
+  return p;
+}
+let songs = [
+  {id:1, title:'内置节奏 · 两小节', meta:'内置', bpm:100, len:4.8, seed:1, loop:true},
+  {id:2, title:'星星落下来.mid', meta:'MIDI', bpm:112, len:161, seed:7},
+  {id:3, title:'雨天的鼓谱.txt', meta:'鼓谱', bpm:88, len:58, seed:3},
+  {id:4, title:'Moonlight Funk.mp3', meta:'歌曲 · 已自动编配', bpm:104, len:192, seed:11},
+];
+let nextId = 5, cur = songs[0], pattern = makePattern(1);
+const hitsOf = s => Math.round(s.len * s.bpm/60*4 * 0.95);
+const fmt = t => Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+
+/* ---------- state ---------- */
+let playing = false, loop = true, director = false, speed = 1;
+let songT = 0, stepF = 0, lastStep = -1;
+
+/* ---------- titlebar meter (ASCII) ---------- */
+const meterEl = $('#meter'), tbNow = $('#tbNow');
+const lv = new Float32Array(8);
+const MCH = ['_','.',':','|','#'];
+function drawMeter(){
+  let s=''; for(let i=0;i<8;i++){ s += MCH[Math.min(4, Math.round(lv[i]*4))]; }
+  meterEl.innerHTML = '[' + s.replace(/#/g,'<em>#</em>') + ']';
+}
+
+/* ---------- spectrum (ASCII) ---------- */
+const specEl = $('#spec'); const SB = 16, SH = 7; const spec = new Float32Array(SB), peak = new Float32Array(SB);
+const PROF = { crash:[9,15], hat:[11,15], snare:[4,10], tom:[2,7], kick:[0,4] };
+function bump(key, v){
+  const [a,b] = PROF[key];
+  for(let i=a;i<=b;i++){ const w = v*(.55+Math.random()*.45)*(1-Math.abs((i-(a+b)/2)/((b-a)/2+1))*.5); spec[i]=Math.max(spec[i], w); peak[i]=Math.max(peak[i],spec[i]); }
+}
+function drawSpec(){
+  const lines=[];
+  for(let r=SH;r>=1;r--){
+    let l='';
+    for(let i=0;i<SB;i++){
+      const h = spec[i]*SH, p = Math.round(peak[i]*SH);
+      if(h >= r-.2) l += r>SH-2 ? '<i>#</i> ' : '# ';
+      else if(p === r) l += '<u>=</u> ';
+      else l += r===1 ? '. ' : '  ';
+    }
+    lines.push(l);
+  }
+  lines.push('低 ------------------ 高');
+  specEl.innerHTML = lines.join('\n');
+}
+
+/* ---------- drum head (ASCII ripple) ---------- */
+const headEl = $('#headArt'); const HW=17, HH=9, HCX=8, HCY=4, HRX=8, HRY=4;
+let hit = {x:HCX, y:HCY, t:-9};
+function drawHead(now){
+  const rad = (now - hit.t)*14; let out='';
+  for(let y=0;y<HH;y++){
+    for(let x=0;x<HW;x++){
+      const d = Math.hypot((x-HCX)/HRX, (y-HCY)/HRY);
+      const outside = d > 1.04;
+      if(outside){ out+=' '; continue; }
+      const inside = (xx,yy) => Math.hypot((xx-HCX)/HRX,(yy-HCY)/HRY) <= 1.04;
+      const edge = !inside(x-1,y) || !inside(x+1,y) || !inside(x,y-1) || !inside(x,y+1);
+      if(Math.round(hit.x)===x && Math.round(hit.y)===y){ out+='<i>*</i>'; continue; }
+      const dh = Math.hypot((x-hit.x)/2*1.0, (y-hit.y));
+      if(!edge && rad < 14 && Math.abs(dh*1.6 - rad) < .9){ out+='<u>~</u>'; continue; }
+      if(edge){ const dx=(x-HCX)/HRX, dy=(y-HCY)/HRY, a=Math.abs(Math.atan2(dy,dx))*180/Math.PI;
+        out += a<25||a>155 ? '|' : (a>65&&a<115) ? '-' : ((dx<0)===(dy<0) ? '/' : '\\'); continue; }
+      out += Math.abs(d-.45)<.07 ? '.' : ' ';
+    }
+    out+='\n';
+  }
+  headEl.innerHTML = out;
+}
+
+function fireHit(row, vel, spot){
+  const R = ROWS[row];
+  bump(R.key, vel);
+  const idx = {crash:7,hat:6,snare:4,tom:2,kick:0}[R.key];
+  lv[idx] = Math.max(lv[idx], vel); lv[Math.min(7,idx+1)] = Math.max(lv[Math.min(7,idx+1)], vel*.6);
+  const r = spot ? spot.r : Math.random()*.8, a = spot ? spot.a : Math.random()*Math.PI*2;
+  hit = {x: HCX + Math.cos(a)*r*(HRX-1), y: HCY + Math.sin(a)*r*(HRY-.6), t: performance.now()/1000};
+  if(document.getElementById('drawer').classList.contains('open') && curTab==='tab-hit'){
+    reveal($('#hName'), R.name, {dur: 260, band: .5}); reveal($('#hPos'), r < .3 ? '中心' : r < .65 ? '中间' : '靠边', {dur: 260, band: .5});
+  } else { $('#hName').textContent = R.name; $('#hPos').textContent = r < .3 ? '中心' : r < .65 ? '中间' : '靠边'; }
+  $('#hVel').textContent = vel.toFixed(2);
+}
+
+/* ---------- star lane ---------- */
+const lane = $('#lane'), lx = lane.getContext('2d');
+function sizeLane(){ const w = lane.clientWidth; lane.width = Math.max(200, Math.round(w)); lane.height = 64; }
+function drawLane(){
+  const W = lane.width, H = lane.height, cell = 14, head = Math.round(W*.28);
+  lx.fillStyle = '#1a1c3e'; lx.fillRect(0,0,W,H);
+  // faint hills
+  lx.fillStyle = '#242655';
+  for(let x=0;x<W;x+=4){ const h = 10 + 6*Math.sin((x+stepF*cell*.3)/37) + 4*Math.sin((x+stepF*cell*.3)/13); lx.fillRect(x,H-h,4,h); }
+  const first = Math.floor(stepF - head/cell) - 1, last = Math.ceil(stepF + (W-head)/cell) + 1;
+  for(let s=first;s<=last;s++){
+    const x = Math.round(head + (s - stepF)*cell);
+    const st = ((s%32)+32)%32;
+    if(st%4===0){ lx.fillStyle = st%16===0 ? 'rgba(151,145,215,.45)' : 'rgba(151,145,215,.16)'; for(let y=4;y<H-2;y+=4) lx.fillRect(x,y,1,2); }
+    if(!cur.loop && (s<0 || s/(cur.bpm/60*4) > cur.len)) continue;
+    for(const row of pattern[st]){
+      const y = 8 + row*11, past = s < stepF - .05, near = Math.abs(s - stepF) < .6;
+      const sz = near ? 6 : 4;
+      lx.globalAlpha = past ? .45 : 1; lx.fillStyle = ROWS[row].col;
+      lx.fillRect(x - sz/2|0, y - sz/2|0, sz, sz);
+    }
+  }
+  lx.globalAlpha = 1;
+  lx.fillStyle = '#e7c03c'; lx.fillRect(head, 2, 1, H-4);
+  // plus-shaped star playhead
+  lx.fillRect(head-4, 6, 9, 1); lx.fillRect(head, 2, 1, 9);
+}
+lane.addEventListener('pointerdown', e => {
+  const r = lane.getBoundingClientRect(); const dx = (e.clientX - r.left)*(lane.width/r.width) - lane.width*.28;
+  seekTo(songT + dx/14/(cur.bpm/60*4));
+});
+/* pixel bars: fill snaps to whole cells, knob sits on the head */
+function setBar(bar, p){
+  const W = bar.clientWidth, pitch = 7, n = Math.round(Math.max(0, Math.min(1, p))*W/pitch);
+  bar.querySelector('.fill').style.width = Math.min(W, n*pitch) + 'px';
+  bar.querySelector('.knob').style.left = (p*W) + 'px';
+}
+function bindDrag(bar){
+  const inp = bar.querySelector('input');
+  inp.addEventListener('pointerdown', () => bar.classList.add('drag'));
+  addEventListener('pointerup', () => bar.classList.remove('drag'));
+}
+function syncBars(){
+  for(const inp of document.querySelectorAll('.ctl input')) inp.dispatchEvent(new Event('input'));
+}
+const seekBar = $('#ovw'), seekIn = $('#seek'); bindDrag(seekBar);
+seekIn.addEventListener('input', () => seekTo(seekIn.value/1000*cur.len));
+function seekTo(t){ songT = Math.max(0, Math.min(cur.len-.01, t)); stepF = songT*cur.bpm/60*4; lastStep = Math.floor(stepF)-1; }
+
+/* ---------- player ---------- */
+const playBtn = $('#play');
+function setPlaying(on){ playing = on; playBtn.classList.toggle('on', on); playBtn.setAttribute('aria-label', on?'暂停':'播放'); }
+playBtn.onclick = () => setPlaying(!playing);
+$('#restart').onclick = () => { seekTo(0); toast('从头开始'); };
+const toggle = (el, fn) => el.onclick = () => { const on = el.getAttribute('aria-pressed') !== 'true'; el.setAttribute('aria-pressed', on); fn(on); };
+toggle($('#loop'), on => { loop = on; toast(on?'循环 开':'循环 关'); });
+toggle($('#dir'), on => { director = on; setCam(on ? '导播 · 远景' : '用户透视'); });
+toggle($('#spot'), on => { toast(on?'聚光灯 开':'聚光灯 关'); });
+
+function showSong(s){
+  cur = s; pattern = makePattern(s.seed); loop = !!s.loop || $('#loop').getAttribute('aria-pressed')==='true';
+  reveal($('#pTitle'), s.title, {dur: 640}); reveal($('#pMeta'), `${s.meta} · ${s.bpm} BPM · ${hitsOf(s)} 下`, {dur: 700, delay: 60});
+  reveal(tbNow, '- ' + s.title, {dur: 700});
+  seekTo(0); renderSongs();
+}
+
+/* camera label with ASCII scramble */
+const camEl = $('#cam'); let camTimer = 0;
+function setCam(txt){ camEl.classList.toggle('live', director); reveal(camEl, txt, {dur: 620}); }
+const SHOTS = ['导播 · 远景','导播 · 特写 军鼓','导播 · 侧面','导播 · 特写 底鼓','导播 · 俯视'];
+let shotIdx = 0;
+
+/* ---------- stage click: strike + ASCII sparks ---------- */
+const stage = $('#stage');
+stage.addEventListener('pointerdown', e => {
+  const r = stage.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
+  sparks(x, y);
+  const row = [2,3,4,0,1][Math.random()*5|0];
+  fireHit(row, .7 + Math.random()*.3, {r: Math.random(), a: Math.random()*6.28});
+  if(director){ director=false; $('#dir').setAttribute('aria-pressed','false'); setCam('用户透视'); }
+});
+function sparks(x, y){
+  const G = ['*','+','.','x','*','\''], C = ['#e7c03c','#f2e396','#f083a5','#a58df1'];
+  const n = reduced() ? 0 : 9;
+  for(let i=0;i<n;i++){
+    const s = document.createElement('span'); s.className='spark'; s.textContent = G[i%G.length]; s.style.color = C[i%C.length];
+    s.style.left = x+'px'; s.style.top = y+'px'; stage.appendChild(s);
+    const a = (i/n)*Math.PI*2 + Math.random()*.4, d = 28 + Math.random()*30;
+    s.animate([{transform:'translate(-50%,-50%) scale(1.2)',opacity:1},{transform:`translate(calc(-50% + ${Math.cos(a)*d}px), calc(-50% + ${Math.sin(a)*d - 10}px)) scale(.6)`,opacity:0}],
+      {duration:520+Math.random()*200, easing:'cubic-bezier(.22,1,.36,1)'}).onfinish = () => s.remove();
+  }
+}
+
+/* ---------- drawer ---------- */
+const drawer = $('#drawer'), menuBtn = $('#menuBtn'), scrim = $('#scrim');
+const TABS = ['tab-lib','tab-adj','tab-hit']; let curTab = 'tab-lib';
+try{ const t = localStorage.getItem('squiddle.mock.tab'); if(TABS.includes(t)) curTab = t; }catch(e){}
+function placeInd(){
+  const b = document.getElementById(curTab), ind = $('#ind');
+  ind.style.width = b.offsetWidth+'px'; ind.style.transform = `translateX(${b.offsetLeft}px)`;
+}
+function selectTab(id, focus){
+  const from = TABS.indexOf(curTab), to = TABS.indexOf(id);
+  curTab = id; try{ localStorage.setItem('squiddle.mock.tab', id); }catch(e){}
+  for(const t of TABS){
+    const b = document.getElementById(t), p = document.getElementById(b.getAttribute('aria-controls'));
+    const on = t === id; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1;
+    p.style.setProperty('--from', (to >= from ? 14 : -14)+'px');
+    if(on && !p.classList.contains('on') && drawer.classList.contains('open')) revealIn(p);
+    p.classList.toggle('on', on);
+  }
+  placeInd(); requestAnimationFrame(syncBars);
+  if(focus) document.getElementById(id).focus();
+}
+function openMenu(on, tab){
+  const was = drawer.classList.contains('open');
+  drawer.classList.toggle('open', on); scrim.classList.toggle('on', on);
+  if(on && !was) setTimeout(() => revealIn(document.querySelector('.pane.on')), 60);
+  menuBtn.setAttribute('aria-expanded', on); menuBtn.setAttribute('aria-pressed', on);
+  if(tab) selectTab(tab); else if(on) selectTab(curTab);
+  if(on) requestAnimationFrame(placeInd);
+}
+menuBtn.onclick = () => openMenu(!drawer.classList.contains('open'));
+$('#drawerX').onclick = () => openMenu(false);
+scrim.onclick = () => openMenu(false);
+for(const t of TABS) document.getElementById(t).onclick = () => selectTab(t);
+$('.tabs').addEventListener('keydown', e => {
+  const i = TABS.indexOf(curTab);
+  if(e.key==='ArrowRight') selectTab(TABS[(i+1)%3], true);
+  if(e.key==='ArrowLeft') selectTab(TABS[(i+2)%3], true);
+});
+
+/* ---------- library ---------- */
+const list = $('#songs');
+function renderSongs(){
+  list.innerHTML = '';
+  for(const s of songs) list.appendChild(songEl(s));
+}
+function songEl(s){
+  const li = document.createElement('li'); li.className = 'song' + (s===cur?' cur':''); li.dataset.id = s.id;
+  li.innerHTML = `<div><div class="row" tabindex="0"><span class="eq"></span><span class="t"><b></b><span></span></span><button class="rm" type="button" aria-label="移除">x</button></div></div>`;
+  const tb = li.querySelector('b'); tb.textContent = s.title; tb.className = 'rv'; tb.dataset.rv = s.title;
+  li.querySelector('.t span').textContent = s.busy ? '编配中…' : `${s.meta} · ${fmt(s.len)}`;
+  const row = li.querySelector('.row');
+  row.onclick = e => { if(e.target.closest('.rm') || s.busy) return; if(s!==cur){ showSong(s); setPlaying(true); toast('> 正在放 ' + s.title); } };
+  row.onkeydown = e => { if(e.key==='Enter') row.click(); };
+  li.querySelector('.rm').onclick = () => {
+    li.classList.add('gone');
+    setTimeout(() => { songs = songs.filter(x => x!==s); li.remove(); if(s===cur && songs[0]) showSong(songs[0]); if(!songs.length) setPlaying(false); }, reduced()?0:300);
+  };
+  return li;
+}
+function addFile(name){
+  const ext = (name.split('.').pop()||'').toLowerCase();
+  const meta = ext==='mid'||ext==='midi' ? 'MIDI' : ext==='txt' ? '鼓谱' : '歌曲 · 已自动编配';
+  const s = {id:nextId++, title:name, meta, bpm:80+Math.random()*60|0, len:60+Math.random()*180, seed:nextId*3, busy:true};
+  songs.unshift(s); const li = songEl(s); li.classList.add('new'); list.prepend(li);
+  openMenu(true,'tab-lib');
+  progressToast('编配 ' + name, 1600, () => { s.busy = false; showSong(s); setPlaying(true); });
+}
+const drop = $('#drop');
+const DEMO = ['夜航.mp3','鼓谱-练习曲.txt','Sparkle Groove.mid','星海.flac'];
+let demoIdx = 0;
+drop.onclick = () => openFile();
+drop.onkeydown = e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openFile(); } };
+function openFile(){ toast('[ 系统"打开"对话框 ]'); setTimeout(() => addFile(DEMO[demoIdx++ % DEMO.length]), 700); }
+
+/* ---------- drag & drop on the window ---------- */
+let dragN = 0;
+win.addEventListener('dragenter', e => { e.preventDefault(); if(++dragN===1){ win.classList.add('dragging'); openMenu(true,'tab-lib'); } });
+win.addEventListener('dragover', e => e.preventDefault());
+win.addEventListener('dragleave', () => { if(--dragN<=0){ dragN=0; win.classList.remove('dragging'); } });
+win.addEventListener('drop', e => { e.preventDefault(); dragN=0; win.classList.remove('dragging');
+  const f = e.dataTransfer.files; if(f && f.length) for(const x of f) addFile(x.name); });
+
+/* ---------- toasts (ASCII typing + spinner) ---------- */
+const toasts = $('#toasts');
+function toast(text, ms=1800){
+  const t = document.createElement('div'); t.className='toast'; toasts.appendChild(t);
+  if(toasts.children.length > 3) toasts.firstChild.remove();
+  reveal(t, text, {from: text.replace(/[^\s]/g, c => wide(c) ? '　' : ' '), dur: 420, force: true});
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 230); }, ms);
+  return t;
+}
+function progressToast(label, ms, done){
+  const t = document.createElement('div'); t.className='toast'; toasts.appendChild(t);
+  const SP = '|/-\\', t0 = performance.now(); let k = 0;
+  const iv = setInterval(() => {
+    const p = Math.min(1, (performance.now()-t0)/ms), n = Math.round(p*14);
+    t.innerHTML = `<span class="k">${SP[k++%4]}</span> ${esc(label)} [${'#'.repeat(n)}${'.'.repeat(14-n)}]`;
+    if(p>=1){ clearInterval(iv); t.innerHTML = `<span class="k">*</span> ${esc(label)} 好了`; done && done();
+      setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 230); }, 1100); }
+  }, 70);
+}
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ---------- adjust pane ---------- */
+for(const inp of document.querySelectorAll('.ctl input')){
+  const out = inp.closest('.ctl').querySelector('output'), bar = inp.closest('.pbar');
+  const upd = () => { setBar(bar, (inp.value-inp.min)/(inp.max-inp.min)); out.textContent = inp.id==='spd' ? inp.value+'%' : inp.value; if(inp.id==='spd') speed = inp.value/100; };
+  inp.addEventListener('input', upd); bindDrag(bar); upd();
+}
+let cap = 0;
+const seg = $('#seg');
+seg.querySelectorAll('button').forEach((b, i) => b.onclick = () => {
+  seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-checked', x===b));
+  $('#segTh').style.transform = `translateX(${i*100}%)`; cap = +b.dataset.cap;
+});
+$('#resetView').onclick = () => toast('视角已重置');
+
+/* ---------- window buttons / fullscreen ---------- */
+function setFull(on){ win.classList.toggle('full', on); requestAnimationFrame(() => { sizeLane(); placeInd(); syncBars(); }); }
+$('#maxBtn').onclick = () => setFull(!win.classList.contains('full'));
+
+/* ---------- keyboard ---------- */
+document.addEventListener('keydown', e => {
+  if(e.target.matches('input,textarea')) return;
+  if(e.code==='Space'){ e.preventDefault(); setPlaying(!playing); }
+  else if(e.key==='m'||e.key==='M'){ openMenu(!drawer.classList.contains('open')); }
+  else if(e.key==='1'||e.key==='2'||e.key==='3'){ openMenu(true, TABS[+e.key-1]); }
+  else if(e.key==='Escape'){ if(win.classList.contains('full')) setFull(false); else openMenu(false); }
+  else if((e.key==='f'||e.key==='F'||e.key==='F11') && !e.ctrlKey){ e.preventDefault(); setFull(!win.classList.contains('full')); }
+  else if((e.ctrlKey||e.metaKey) && (e.key==='o'||e.key==='O')){ e.preventDefault(); openFile(); }
+});
+
+/* ---------- splash ---------- */
+const SQ = [
+[ '        <i>*</i>        ',
+  '       /^\\       ',
+  '      / <i>*</i> \\      ',
+  '     |  <i>*</i>  |     ',
+  '     | <i>***</i> |     ',
+  '      \\___/      ',
+  '      (o o)      ',
+  '   ,--/|||\\--,   ',
+  '  <u>[==]</u>  |  <u>[==]</u>  ',
+  ' <u>(____)</u>/_\\<u>(____)</u> ' ],
+[ '        <i>+</i>        ',
+  '       /^\\       ',
+  '      / <i>+</i> \\      ',
+  '     |  <i>*</i>  |     ',
+  '     | <i>***</i> |     ',
+  '      \\___/      ',
+  '      (- -)      ',
+  "   '--/|||\\--,   ",
+  '  <u>[==]</u>  |  <u>[==]</u> <i>*</i>',
+  ' <u>(____)</u>/_\\<u>(____)</u> ' ],
+[ '        <i>.</i>        ',
+  '       /^\\       ',
+  '      / <i>*</i> \\      ',
+  '     |  <i>+</i>  |     ',
+  '     | <i>***</i> |     ',
+  '      \\___/      ',
+  '      (o o)      ',
+  "   ,--/|||\\--'   ",
+  '<i>*</i> <u>[==]</u>  |  <u>[==]</u>  ',
+  ' <u>(____)</u>/_\\<u>(____)</u> ' ],
+];
+const STEPS = ['调鼓皮','接音箱','铺星空','叫醒鱿鱼'];
+const splash = $('#splash'), sq = $('#sq'), load = $('#load');
+load.innerHTML = '<span id="loadStep"></span><span id="loadBar"></span>';
+const loadStep = $('#loadStep'), loadBar = $('#loadBar');
+let splashRun = 0;
+function runSplash(){
+  const id = ++splashRun;
+  win.classList.remove('ready'); splash.classList.remove('bye'); splash.style.display = ''; loadStep.textContent = ''; loadStep.dataset.want = '';
+  const dur = reduced() ? 300 : 2600, t0 = performance.now(); let f = 0;
+  const tick = () => {
+    if(id !== splashRun) return;
+    const p = Math.min(1, (performance.now()-t0)/dur), n = Math.round(p*20);
+    sq.innerHTML = SQ[f++ % 3].join('\n');
+    const st = STEPS[Math.min(3, Math.floor(p*4))];
+    if(st !== loadStep.textContent && loadStep.dataset.want !== st){ loadStep.dataset.want = st; reveal(loadStep, st, {dur: 300, band: .5}); }
+    loadBar.innerHTML = `  [<b>${'#'.repeat(n)}</b>${'.'.repeat(20-n)}] ${String(Math.round(p*100)).padStart(3)}%`;
+    if(p < 1) setTimeout(tick, 170);
+    else setTimeout(() => {
+      if(id !== splashRun) return;
+      splash.classList.add('bye'); win.classList.add('ready');
+      setTimeout(() => { if(id===splashRun){ splash.style.display='none'; } }, 650);
+      sizeLane(); setPlaying(true); syncBars();
+      reveal($('#logoT'), 'Squiddle', {from: '########', dur: 700, force: true});
+      reveal(camEl, camEl.textContent, {from: camEl.textContent.replace(/./g,'　'), dur: 600, delay: 200, force: true});
+    }, 220);
+  };
+  tick();
+}
+$('#replay').onclick = () => { setPlaying(false); openMenu(false); runSplash(); };
+$('#rmBtn').onclick = e => { const on = !root.classList.contains('rm'); root.classList.toggle('rm', on); e.currentTarget.setAttribute('aria-pressed', on); };
+
+/* ---------- main loop (dt-based) ---------- */
+let last = performance.now(), fN = 0, fT = 0, lastDraw = 0, specT = 0, shotT = 0;
+const fpsHist = [];
+function frame(now){
+  requestAnimationFrame(frame);
+  if(cap && now - lastDraw < 1000/cap - 1.5) return;
+  const raw = (now - last)/1000, dt = Math.min(.05, raw); last = now; lastDraw = now;
+  fN++; fT += raw;
+  if(fT >= .5){
+    const v = Math.round(fN/fT); $('#fpsV').textContent = v + ' fps';
+    fpsHist.push(v); if(fpsHist.length > 14) fpsHist.shift();
+    const mx = Math.max(...fpsHist, 1); $('#fpsGr').textContent = fpsHist.map(x => ' ._-=^'[Math.max(1, Math.round(x/mx*5))]).join('');
+    fN = 0; fT = 0;
+  }
+  if(playing){
+    songT += dt*speed;
+    if(songT >= cur.len){ if(loop || cur.loop){ songT -= cur.len; lastStep = -1; } else { songT = cur.len; setPlaying(false); } }
+    stepF = songT*cur.bpm/60*4;
+    const s = Math.floor(stepF);
+    if(s !== lastStep){
+      if(s > lastStep) for(let k=lastStep+1;k<=s;k++) for(const row of pattern[((k%32)+32)%32]) fireHit(row, .6 + Math.random()*.4);
+      lastStep = s;
+    }
+    if(director){ shotT += dt; if(shotT > 3.2){ shotT = 0; shotIdx = (shotIdx+1)%SHOTS.length; setCam(SHOTS[shotIdx]); } }
+  }
+  // decay (per second, frame-rate independent)
+  const k = Math.pow(.02, dt), kp = Math.pow(.25, dt);
+  for(let i=0;i<8;i++) lv[i] *= Math.pow(.05, dt);
+  for(let i=0;i<SB;i++){ spec[i] *= k; peak[i] = Math.max(spec[i], peak[i]*kp - dt*.15); }
+
+  $('#time').textContent = `${fmt(songT)} / ${fmt(cur.len)}`;
+  const p = songT/cur.len; setBar(seekBar, p); if(!seekBar.classList.contains('drag')) seekIn.value = Math.round(p*1000);
+  drawLane();
+  specT += dt;
+  if(specT > 1/30){ specT = 0; drawMeter(); if(drawer.classList.contains('open')){ if(curTab==='tab-hit'){ drawSpec(); drawHead(now/1000); } }
+    const eq = list.querySelector('.song.cur .eq');
+    if(eq){ eq.textContent = playing ? [0,3,6].map(i => '.:|'[Math.min(2, Math.round((lv[i]+lv[i+1])*1.6))]).join('') : '|| '; }
+    for(const b of list.querySelectorAll('.song:not(.cur) .eq')) b.textContent = '';
+  }
+}
+
+/* ---------- boot ---------- */
+addEventListener('resize', () => { sizeLane(); placeInd(); syncBars(); });
+showSong(songs[0]);
+selectTab(curTab);
+drawSpec(); drawHead(0); drawMeter();
+requestAnimationFrame(frame);
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { sizeLane(); placeInd(); syncBars(); });
+runSplash();
+})();
+</script>
