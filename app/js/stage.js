@@ -1,7 +1,8 @@
 (function(){
 'use strict';
 const V3 = THREE.Vector3, UPV = new V3(0,1,0);
-const W = 320, H = 180;
+const W0 = 320, H0 = 180;
+let W = W0, H = H0, FOVK = 1;     // 渲染分辨率跟着舞台区域的宽高比走：宽窗口加宽，高窗口加高（像素大小不变）
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:false});
 renderer.setPixelRatio(1);
@@ -20,7 +21,7 @@ const camera = new THREE.PerspectiveCamera(38, W/H, 0.3, 60);
 const post = new THREE.ShaderMaterial({
   uniforms:{tColor:{value:rt.texture}, tDepth:{value:rt.depthTexture}, px:{value:new THREE.Vector2(1/W,1/H)}, near:{value:camera.near}, far:{value:camera.far}, fogFar:{value:20}, ink:{value:new THREE.Color(0x1a1230)}, inkJ:{value:new THREE.Color(0x8a1f55)},
     projInv:{value:new THREE.Matrix4()}, camWorld:{value:new THREE.Matrix4()}, mantleInv:{value:new THREE.Matrix4()}, mantleH:{value:1.75},
-    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x1f2263)}, beamC:{value:new THREE.Color(0xfff3c4)}},
+    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x22244c)}, beamC:{value:new THREE.Color(0xfff3c4)}},
   vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
   fragmentShader:`
     uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 px; uniform float near; uniform float far; uniform float fogFar; uniform vec3 ink; uniform vec3 inkJ;
@@ -197,7 +198,7 @@ const FANS = (()=>{
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('fcol', new THREE.BufferAttribute(col, 3)); geo.setAttribute('fbr', new THREE.BufferAttribute(brd, 2));
   const mat = new THREE.ShaderMaterial({
-    uniforms:{uT:{value:0}, night:{value:new THREE.Color(0x1f2263)}},
+    uniforms:{uT:{value:0}, night:{value:new THREE.Color(0x22244c)}},
     vertexShader:'uniform float uT; uniform vec3 night; attribute vec3 fcol; attribute vec2 fbr; varying vec3 vC; varying float vS; void main(){ float b = .5 + .5*sin(uT*fbr.y + fbr.x); b = .12 + .88*b*b; vC = mix(night, fcol, b); vec4 mv = modelViewMatrix*vec4(position, 1.); vS = floor(clamp(28./-mv.z, 2., 3.)); gl_PointSize = vS; gl_Position = projectionMatrix*mv; }',
     // 近的画成 3 格的十字小星，远的 2 格；alpha 写 0.75 给后处理当"自己发光、别压暗"的记号
     fragmentShader:'varying vec3 vC; varying float vS; void main(){ vec2 q = abs(gl_PointCoord - .5); if(vS > 2.5 && q.x > .2 && q.y > .2) discard; gl_FragColor = vec4(vC, .75); }',
@@ -236,8 +237,20 @@ function orbitPose(o){
 }
 function applyCam(pos, look, fov){
   camera.position.copy(pos); camera.lookAt(look);
+  if(FOVK !== 1) fov = 2*Math.atan(Math.tan(fov*Math.PI/360)*FOVK)*360/Math.PI;   // 比 16:9 高的窗口：竖向视野放大一些
   if(Math.abs(camera.fov - fov) > 1e-3){ camera.fov = fov; camera.updateProjectionMatrix(); }
   const r = pos.distanceTo(look); scene.fog.near = r + 2; scene.fog.far = r + 14; post.uniforms.fogFar.value = scene.fog.far;
+}
+// 舞台区域变了：16:9 及更宽时高度固定 180 格、宽度加宽；更窄时宽度固定 320 格、高度加高
+function fitView(cw, ch){
+  if(!(cw > 0 && ch > 0)) return;
+  const a = cw/ch, A0 = W0/H0;
+  let w, h; if(a >= A0){ h = H0; w = Math.min(1280, Math.round(H0*a)); } else { w = W0; h = Math.min(720, Math.round(W0/a)); }
+  FOVK = a < A0 ? Math.sqrt(A0/a) : 1;      // 高窗口：竖向视野放大一半（按比例开方），横向稍微裁一点，鼓手不至于缩得太小
+  if(w === W && h === H) return;
+  W = w; H = h;
+  renderer.setSize(W, H, false); rt.setSize(W, H); post.uniforms.px.value.set(1/W, 1/H);
+  camera.aspect = W/H; camera.fov = -1;      // 下一帧 applyCam 重新算投影
 }
 function applyOrbit(){ orbitPose(UPOSE); applyCam(UPOSE.pos, UPOSE.look, UPOSE.fov); }
 // 平移：看向点限制在舞台附近，免得把整套鼓拖出画面找不回来
@@ -2211,7 +2224,7 @@ function envAt(t){
 }
 function drawLane(){
   const T = SONG.T, tA = T - PHX/PPS, tB = T + (LW - PHX)/PPS;
-  const g = lc.createLinearGradient(0, 0, 0, LH); g.addColorStop(0, '#1d1f49'); g.addColorStop(1, '#363a7b');
+  const g = lc.createLinearGradient(0, 0, 0, LH); g.addColorStop(0, '#1e1f39'); g.addColorStop(1, '#363960');
   lc.fillStyle = g; lc.fillRect(0, 0, LW, LH);
   lc.fillStyle = 'rgba(176,164,255,0.14)';                      // 银河：歌的响度（或鼓点的疏密）
   for(let x=0; x<LW; x+=2){ const h = Math.round(envAt(tA + x/PPS)*(LH - 8)*0.5); if(h > 0) lc.fillRect(x, (LH >> 1) - h, 2, 2*h); }
@@ -2623,7 +2636,7 @@ function aimAt(clientX, clientY){
 const ptrs = new Map(); let moved = 0, pinch0 = 0, r0 = 0, panMode = false, mid0x = 0, mid0y = 0;
 const _pr = new V3(), _pu = new V3();
 function panBy(dx, dy){                      // 按屏幕方向平移看向点：手拖多少，画面就跟着走多少
-  const h = canvas.clientHeight || 360, k = 2*clampR(orbit.r)*Math.tan(FOV0*Math.PI/360)/h;
+  const h = canvas.clientHeight || 360, k = 2*clampR(orbit.r)*Math.tan(FOV0*Math.PI/360)*FOVK/h;
   _pr.setFromMatrixColumn(camera.matrixWorld, 0); _pu.setFromMatrixColumn(camera.matrixWorld, 1);
   orbit.target.addScaledVector(_pr, -dx*k).addScaledVector(_pu, dy*k); clampTarget();
 }
@@ -2661,6 +2674,8 @@ Object.assign(window.__dbg, {SONG, LIB, loadSong, parseTab, parseMidi, analyzeAu
 // ---------- Squiddle：界面（js/ui.js）只通过这个接口和舞台打交道 ----------
 // 事件：state {playing, loop, director, spot} · song {name, kind, mode, dur, loop, rate, speedLabel, meta} · lib [{i, name, kind, dur, bpm, current}]
 //       hit {key, label, drum, vel, rn, x, z, speed, parts} · aim {x, y, key}（点中了鼓，屏幕坐标） · camera '导播 · 全景' · job {txt, p} | null · msg {txt, err}
+new ResizeObserver(()=>fitView(canvas.clientWidth, canvas.clientHeight)).observe(canvas);
+fitView(canvas.clientWidth, canvas.clientHeight);
 window.Squiddle = {
   on(type, f){ (BUS[type] = BUS[type] || []).push(f); },
   state, song:songInfo, lib:libInfo, camera:()=>camLabel,

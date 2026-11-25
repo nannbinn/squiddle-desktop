@@ -1,12 +1,12 @@
 /* Squiddle 桌面版界面（定稿小样 v2）：自绘标题栏 + 铺满的 16:9 舞台 + 右侧抽屉 + 底部星轨播放条。
-   配色是原来的星空靛蓝降了一点饱和度和亮度（饱和度 ×0.78，亮度 ×0.93）；按钮没有投影；进度条是像素格。 */
+   配色是原来的星空靛蓝降了饱和度和亮度（两轮：饱和度 ×0.78×0.72，亮度 ×0.93×0.85）；按钮没有投影；进度条是像素格。 */
 :root{
   color-scheme:dark;
-  --night:#242655; --deep:#1a1c3e; --panel:#2c2f64; --panel2:#383c7c; --raise:#42468d;
+  --night:#242642; --deep:#1a1c30; --panel:#2c2e4e; --panel2:#383a61; --raise:#41436f;
   --hair:#9791d7; --hair-dim:rgba(151,145,215,.32);
   --pink:#f083a5; --pink-d:#c65f83; --pale:#f2e396; --star:#e7c03c; --plum:#93407f; --violet:#a58df1; --ink:#1a142a;
   --fg:#dcd4fa; --mist:#aaa6dc; --dim:#827eb8; --err:#f0a39a;
-  --stage-night:#1f2263;   /* 舞台四周和聚光灯暗场同色，开灯时画面融进去（主画面的颜色不动） */
+  --stage-night:#22244c;   /* 聚光灯暗场的颜色（stage.js 里 night 同值） */
   --f-pixel:"Silkscreen",ui-monospace,monospace;
   --f-ascii:"VT323","ZCOOL QingKe HuangYou",ui-monospace,"Cascadia Mono",Consolas,monospace;
   --f-cn:"ZCOOL QingKe HuangYou","Microsoft YaHei","PingFang SC",sans-serif;
@@ -43,8 +43,8 @@ button{font:inherit;color:inherit}
 
 /* ---------- 舞台：在剩下的空间里按 16:9 尽量大 ---------- */
 .stagewrap{position:relative;flex:1;min-height:0;overflow:hidden}
-.stage{position:absolute;inset:0;display:grid;place-items:center;background:var(--stage-night);container-type:size}
-.screen{position:relative;width:min(100cqw,calc(100cqh*16/9));aspect-ratio:16/9}   /* 画面本身，镜头名贴着画面的角，不跨到两边的黑边上 */
+.stage{position:absolute;inset:0;background:var(--stage-night)}
+.screen{position:absolute;inset:0}   /* 画面铺满舞台区域，舞台按这个宽高比渲染，没有黑边 */
 .stage canvas{width:100%;height:100%;display:block;image-rendering:pixelated;cursor:grab;touch-action:none}
 .stage canvas:active{cursor:grabbing}
 .cam{position:absolute;left:14px;top:10px;font-family:var(--f-ascii);font-size:20px;color:#77729e;letter-spacing:1px;white-space:pre;pointer-events:none;transition:color .6s}
@@ -58,7 +58,7 @@ button{font:inherit;color:inherit}
   font-family:var(--f-cn);font-size:26px;cursor:pointer;animation:tin .42s var(--spring) both}
 
 /* ---------- 右侧抽屉 ---------- */
-.drawer{position:absolute;top:0;right:0;bottom:0;width:min(var(--drawer),88%);background:rgba(26,28,62,.93);backdrop-filter:blur(8px);
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(var(--drawer),88%);background:rgba(26,28,48,.93);backdrop-filter:blur(8px);
   border-left:1px solid var(--hair);display:flex;flex-direction:column;z-index:5;
   transform:translateX(102%);visibility:hidden;transition:transform .24s var(--inn),visibility 0s .24s}
 .drawer.open{transform:none;visibility:visible;transition:transform .42s var(--out),visibility 0s}
