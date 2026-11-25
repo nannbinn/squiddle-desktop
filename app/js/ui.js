@@ -685,7 +685,11 @@ const Glyphs = (() => {
   if(window.ResizeObserver) new ResizeObserver(() => { if(running) build(); }).observe(splash.querySelector('.box'));
   addEventListener('resize', () => { if(running) build(); });
   return {
-    start(){ readColors(); if(!build()) return; running = true; requestAnimationFrame(frame); if(document.fonts) document.fonts.ready.then(() => running && build()); },
+    start(){
+      readColors(); if(!build()) return; running = true; requestAnimationFrame(frame);
+      // 明确要求加载像素字，加载完再重做一次字模图（Safari 不会因为画布要用就自己去加载字体）
+      if(document.fonts) document.fonts.load(CFG.font, '鼓Ag').catch(() => {}).then(() => { if(running){ atlas = null; build(); } });
+    },
     stop(){ running = false; cv.width = cv.height = slowCv.width = slowCv.height = atlasCv.width = atlasCv.height = 0; atlas = null; },   // 进了主界面就把两张大画布的显存还回去
   };
 })();
