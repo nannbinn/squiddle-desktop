@@ -6,9 +6,20 @@
 
 ```bash
 npm ci
-npm run prepare-web   # 由 web/index-jelly.html 生成 app/index.html，three.js 和字体改为本地
+npm run prepare-web   # 把 three.js 和字体拷进 app/vendor（离线可用）
 npm start             # 本地运行
+xvfb-run -a -s "-screen 0 1400x1000x24" node scripts/smoke.js out/smoke   # 冒烟测试（Linux 无显示器时）
 ```
+
+## 结构
+
+- `app/js/stage.js`：舞台（Three.js 画面、触手动画、鼓声合成、MIDI / 鼓谱 / 音频解析、星轨）。对界面只开放 `window.Squiddle` 接口（播放、跳转、换歌、读文件、音量等）和事件（`state`、`song`、`lib`、`hit`、`aim`、`camera`、`job`、`msg`），接口说明见文件末尾。
+- `app/js/ui.js` + `app/css/ui.css`：界面（自绘标题栏、播放条和像素进度条、右侧抽屉、文字显影、ASCII 动画、开场）。
+- `electron/`：无边框窗口、标题栏按钮的 IPC、屏蔽外网请求。
+- `design/ui-mockup/`：界面定稿小样。
+- `web/index-jelly.html`：网页版原稿，仅作对照。
+
+快捷键：空格 播放/暂停，M 菜单，1 / 2 / 3 切页，Esc 收起菜单或退出全屏，F11 全屏，Ctrl+O 打开文件，F12 开发者工具。
 
 ## 打包
 
@@ -19,4 +30,4 @@ npm start             # 本地运行
 ## 第三方
 
 - three.js r128（MIT）
-- 字体 Silkscreen、站酷庆科黄油体（SIL Open Font License，见 app/vendor/fonts/*-LICENSE.txt）
+- 字体 Silkscreen、站酷庆科黄油体、VT323（SIL Open Font License，见 app/vendor/fonts/*-LICENSE.txt）

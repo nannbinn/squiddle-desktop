@@ -1,7 +1,8 @@
 (function(){
 'use strict';
 const V3 = THREE.Vector3, UPV = new V3(0,1,0);
-const W = 320, H = 180;
+const W0 = 320, H0 = 180;
+let W = W0, H = H0, FOVK = 1;     // 渲染分辨率跟着舞台区域的宽高比走：宽窗口加宽，高窗口加高（像素大小不变）
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:false});
 renderer.setPixelRatio(1);
@@ -20,7 +21,7 @@ const camera = new THREE.PerspectiveCamera(38, W/H, 0.3, 60);
 const post = new THREE.ShaderMaterial({
   uniforms:{tColor:{value:rt.texture}, tDepth:{value:rt.depthTexture}, px:{value:new THREE.Vector2(1/W,1/H)}, near:{value:camera.near}, far:{value:camera.far}, fogFar:{value:20}, ink:{value:new THREE.Color(0x1a1230)}, inkJ:{value:new THREE.Color(0x8a1f55)},
     projInv:{value:new THREE.Matrix4()}, camWorld:{value:new THREE.Matrix4()}, mantleInv:{value:new THREE.Matrix4()}, mantleH:{value:1.75},
-    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x1f2263)}, beamC:{value:new THREE.Color(0xfff3c4)}},
+    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x22244c)}, beamC:{value:new THREE.Color(0xfff3c4)}},
   vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
   fragmentShader:`
     uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 px; uniform float near; uniform float far; uniform float fogFar; uniform vec3 ink; uniform vec3 inkJ;
@@ -197,7 +198,7 @@ const FANS = (()=>{
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('fcol', new THREE.BufferAttribute(col, 3)); geo.setAttribute('fbr', new THREE.BufferAttribute(brd, 2));
   const mat = new THREE.ShaderMaterial({
-    uniforms:{uT:{value:0}, night:{value:new THREE.Color(0x1f2263)}},
+    uniforms:{uT:{value:0}, night:{value:new THREE.Color(0x22244c)}},
     vertexShader:'uniform float uT; uniform vec3 night; attribute vec3 fcol; attribute vec2 fbr; varying vec3 vC; varying float vS; void main(){ float b = .5 + .5*sin(uT*fbr.y + fbr.x); b = .12 + .88*b*b; vC = mix(night, fcol, b); vec4 mv = modelViewMatrix*vec4(position, 1.); vS = floor(clamp(28./-mv.z, 2., 3.)); gl_PointSize = vS; gl_Position = projectionMatrix*mv; }',
     // 近的画成 3 格的十字小星，远的 2 格；alpha 写 0.75 给后处理当"自己发光、别压暗"的记号
     fragmentShader:'varying vec3 vC; varying float vS; void main(){ vec2 q = abs(gl_PointCoord - .5); if(vS > 2.5 && q.x > .2 && q.y > .2) discard; gl_FragColor = vec4(vC, .75); }',
@@ -236,8 +237,20 @@ function orbitPose(o){
 }
 function applyCam(pos, look, fov){
   camera.position.copy(pos); camera.lookAt(look);
+  if(FOVK !== 1) fov = 2*Math.atan(Math.tan(fov*Math.PI/360)*FOVK)*360/Math.PI;   // 比 16:9 高的窗口：竖向视野放大一些
   if(Math.abs(camera.fov - fov) > 1e-3){ camera.fov = fov; camera.updateProjectionMatrix(); }
   const r = pos.distanceTo(look); scene.fog.near = r + 2; scene.fog.far = r + 14; post.uniforms.fogFar.value = scene.fog.far;
+}
+// 舞台区域变了：16:9 及更宽时高度固定 180 格、宽度加宽；更窄时宽度固定 320 格、高度加高
+function fitView(cw, ch){
+  if(!(cw > 0 && ch > 0)) return;
+  const a = cw/ch, A0 = W0/H0;
+  let w, h; if(a >= A0){ h = H0; w = Math.min(1280, Math.round(H0*a)); } else { w = W0; h = Math.min(720, Math.round(W0/a)); }
+  FOVK = a < A0 ? Math.sqrt(A0/a) : 1;      // 高窗口：竖向视野放大一半（按比例开方），横向稍微裁一点，鼓手不至于缩得太小
+  if(w === W && h === H) return;
+  W = w; H = h;
+  renderer.setSize(W, H, false); rt.setSize(W, H); post.uniforms.px.value.set(1/W, 1/H);
+  camera.aspect = W/H; camera.fov = -1;      // 下一帧 applyCam 重新算投影
 }
 function applyOrbit(){ orbitPose(UPOSE); applyCam(UPOSE.pos, UPOSE.look, UPOSE.fov); }
 // 平移：看向点限制在舞台附近，免得把整套鼓拖出画面找不回来
@@ -1838,27 +1851,9 @@ function updateBase(L){
   L.baseQuat.setFromUnitVectors(_Z, L.baseDir);
 }
 
-// ---------- 读数 ----------
-const modesCv = document.getElementById('modes'), mctx = modesCv.getContext('2d');
-let parts = [], shown = [];
-const fmtF = f => f >= 1000 ? (f/1000).toFixed(1)+'k' : String(Math.round(f));
-const MSKY = (()=>{ let q = 7; const r = ()=>((q = (q*16807) % 2147483647) - 1)/2147483646; return Array.from({length:40}, ()=>({x:Math.floor(r()*320), y:Math.floor(r()*110), b:r()})); })();
-function drawModes(dt){
-  mctx.fillStyle = '#1c1f57'; mctx.fillRect(0,0,320,110);
-  for(const st of MSKY){ mctx.fillStyle = st.b > 0.88 ? '#fff1a6' : 'rgba(243,239,255,' + (0.2 + 0.4*st.b).toFixed(2) + ')'; mctx.fillRect(st.x, st.y, 1, 1); }
-  const n = Math.max(1, parts.length), gap = 6, bw = Math.floor((300 - (n-1)*gap)/n), x0 = Math.floor((320 - (n*bw + (n-1)*gap))/2);
-  const mx = Math.max(0.0001, ...parts.map(p=>p.a));
-  mctx.font = '9px Silkscreen, monospace'; mctx.textAlign = 'center';
-  parts.forEach((p,i)=>{
-    shown[i] *= Math.exp(-dt/Math.max(0.03, p.tau*0.5));
-    const x = x0 + i*(bw+gap), hgt = Math.round(70*shown[i]/mx);
-    mctx.fillStyle = 'rgba(61,66,168,0.55)'; mctx.fillRect(x, 10, bw, 70);
-    mctx.fillStyle = '#8f88c8'; mctx.fillRect(x, 80-Math.round(70*p.a/mx), bw, 2);
-    mctx.fillStyle = p.col; mctx.fillRect(x, 80-hgt, bw, hgt);
-    mctx.fillStyle = '#bdb6ec'; mctx.fillText(p.lab, x+bw/2, 92); mctx.fillText(fmtF(p.f), x+bw/2, 104);
-  });
-}
-const rInst = document.getElementById('rInst'), rVel = document.getElementById('rVel'), rPos = document.getElementById('rPos'), rSpd = document.getElementById('rSpd');
+// ---------- 对界面开放的事件（界面在 js/ui.js，用 Squiddle.on 订阅） ----------
+const BUS = {};
+function emit(type, d){ const fs = BUS[type]; if(fs) for(const f of fs){ try{ f(d); } catch(e){ console.error(e); } } }
 
 // ---------- 碰撞：触手末段碰到鼓皮或镲片才发声 ----------
 const HITS = {};
@@ -1881,8 +1876,7 @@ function onContact(L, I, speed){
   }
   HITS[I.key] = (HITS[I.key]||0) + 1;
   charHit(I, vel); dirHit(I);
-  parts = res; shown = res.map(p=>p.a);
-  rInst.textContent = I.label; rVel.textContent = vel.toFixed(2); rPos.textContent = rn.toFixed(2); rSpd.textContent = speed.toFixed(1)+' m/s';
+  emit('hit', {key:I.key, label:I.label, drum:!!I.isDrum, vel, rn, x:loc.x/I.R, z:loc.z/I.R, speed, parts:res});
   L.contactT = simT; L.curl = 0.12;
   L.lastHit.p.copy(L.mid).addScaledVector(I.n, -surfDist(I, L.mid)); L.lastHit.n.copy(I.n); L.lastHit.t = Math.max(simT, L.nextHit.t - 0.03);
   const ev = L.nextHit.ev; if(ev && playing){ ev.hitAt = simT; ev.hitIt = L.iter; ev.hitT = SONG.T; }     // 星轨上点亮这一下
@@ -1999,7 +1993,7 @@ function sortJelly(){
 scene.traverse(o=>{ if(o.isMesh && o !== floor && o !== shadowCatcher){ o.castShadow = true; if(o.isInstancedMesh) o.frustumCulled = false; } });
 
 // ---------- 导播：放歌时自动切镜头（全景、脸部特写、乐器特写、背影、俯拍、仰拍） ----------
-const vpLabel = document.querySelector('.vplabel'), dirBtn = document.getElementById('dirBtn');
+let camLabel = '用户透视';
 const INAME = {kick:'底鼓', snare:'军鼓', hihat:'踩镲', tom1:'高嗵', tom2:'中嗵', floor:'落地嗵', crash:'吊镲'};
 // 每件乐器一个不被别的东西挡住的机位：看向点 xyz、方位角、俯仰角、距离、视角
 const ISHOT = {
@@ -2044,7 +2038,7 @@ function dirHit(I){                          // 到点了就在底鼓、军鼓�
   if(DIR.cutReq && (I.key === 'kick' || I.key === 'snare' || I.key === 'crash')) pickShot();
   else if(I.key === 'crash' && DIR.t > 1.6 && Math.random() < 0.6) pickShot(Math.random() < 0.5 ? 'face' : 'wide');
 }
-function setDirector(on){ DIR.on = on; dirBtn.setAttribute('aria-pressed', String(on)); }
+function setDirector(on){ DIR.on = on; emit('state', state()); }
 // 手动拖动、平移或缩放时，导播把镜头交回给你：按当前画面换算成轨道相机的参数，画面不会跳
 const _hv = new V3();
 function handOff(){
@@ -2076,19 +2070,18 @@ function updateCamera(dt){
   }
   applyCam(C.pos, C.look, C.fov);
   const lab = DIR.w > 0.5 && DIR.shot ? '导播 · ' + DIR.shot.label : '用户透视';
-  if(vpLabel.textContent !== lab) vpLabel.textContent = lab;
+  if(camLabel !== lab){ camLabel = lab; emit('camera', lab); }
 }
-dirBtn.addEventListener('click', ()=>setDirector(!DIR.on));
-const spotBtn = document.getElementById('spotBtn'), stageEl = document.getElementById('stage');
-spotBtn.addEventListener('click', ()=>{ SPOT.on = !SPOT.on; spotBtn.setAttribute('aria-pressed', String(SPOT.on)); stageEl.classList.toggle('spot', SPOT.on); });
 
 // ---------- 主循环 ----------
-const fpsOut = document.getElementById('fpsV');
-let last = performance.now(), skinClock = 0, memAcc = 0, fpsN = 0, fpsT = 0, fpsShown = '';
+let last = performance.now(), skinClock = 0, memAcc = 0, fpsN = 0, fpsT = 0, FPS = 0, CAP = 0, lastDraw = 0;
 function frame(now){
+  requestAnimationFrame(frame);
+  if(CAP && now - lastDraw < 1000/CAP - 2) return;        // 帧率上限：没到时间就跳过这一帧
+  lastDraw = now;
   const raw = (now-last)/1000, dt = Math.min(1/20, raw); last = now; FDT = dt;
   fpsN++; fpsT += raw;
-  if(fpsT >= 0.5){ const v = Math.round(fpsN/fpsT) + ' fps'; if(v !== fpsShown){ fpsOut.textContent = fpsShown = v; } fpsN = 0; fpsT = 0; }   // 调节页里显示实测帧率
+  if(fpsT >= 0.5){ FPS = Math.round(fpsN/fpsT); fpsN = 0; fpsT = 0; }   // 实测帧率，调节页里显示
   simT += dt;
   if(playing) advanceSong(dt);
   const lidA = updateCharacter(dt);
@@ -2144,8 +2137,7 @@ function frame(now){
     const a = c.wobT < 3 ? c.wobAmp*Math.exp(-c.wobT*(c.kind==='crash' ? 2.2 : 9))*Math.cos(c.wobT*17) : 0;
     c.wob.quaternion.setFromAxisAngle(c.wobAxis, a);
   }
-  drawLane(); drawOverview(); updateClock();
-  drawModes(dt);
+  drawLane();
 
   updateCamera(dt);
   updateSpot(dt);
@@ -2156,90 +2148,72 @@ function frame(now){
   post.uniforms.mantleInv.value.copy(mantleG.matrixWorld).invert();
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
-  requestAnimationFrame(frame);
 }
 window.__dbg = {camera, orbit, body, limbs, arms:armDefs, INST, HITS, eyes, eyeLook, CH, ORGANS, STARS, JT, mantleG, DIR, pickShot, SHOTS, SPOT, FANS};
 requestAnimationFrame(frame);
 
-// ---------- 交互 ----------
-const startBtn = document.getElementById('start');
-startBtn.addEventListener('click', ()=>{
+// ---------- 播放控制（按钮在界面那边，见文件末尾的 Squiddle 接口） ----------
+function unlockAudio(){
   if(!actx) initAudio();
-  actx.resume().then(()=>{ if(playing) startSongAudio(); });
-  startBtn.hidden = true;
-});
-if(window.squiddleDesktop) startBtn.click();     // 桌面版：没有自动播放限制，打开就有声音
-const playBtn = document.getElementById('play'), rewindBtn = document.getElementById('rewind'), loopBtn = document.getElementById('loop');
-const trkName = document.getElementById('trkName'), trkMeta = document.getElementById('trkMeta');
-const tCur = document.getElementById('tCur'), tDur = document.getElementById('tDur');
+  return actx.resume().then(()=>{ if(playing) startSongAudio(); });
+}
+if(window.squiddleDesktop) unlockAudio();     // 桌面版：没有自动播放限制，打开就有声音
 function resync(){ for(const L of limbs){ L.manual = false; L.lastHit.t = simT; scheduleNext(L, 'now'); } }
+function state(){ return {playing, loop:SONG.loop, director:DIR.on, spot:SPOT.on}; }
 function setPlaying(on){
   playing = on;
   for(const L of limbs) L.manual = false;
-  playBtn.classList.toggle('on', on); playBtn.setAttribute('aria-label', on ? '暂停' : '播放');
   if(on){ if(Math.abs(SONG.T) < 0.01) SONG.T = -LEAD; startSongAudio(); resync(); }
   else {
     stopSongAudio();
     for(const L of limbs){ const I = L.nextHit.inst; if(I){ L.lastHit.p.copy(L.mid).addScaledVector(I.n, -surfDist(I, L.mid)); L.lastHit.n.copy(I.n); } L.lastHit.t = simT; }
   }
+  emit('state', state());
 }
-playBtn.addEventListener('click', ()=>setPlaying(!playing));
 function seekTo(t){
   SONG.T = Math.max(0, Math.min(SONG.dur - 0.05, t));
   for(const e of SONG.events) e.hitIt = -1;
   if(playing){ startSongAudio(); resync(); }
-  updateClock(true);
 }
-rewindBtn.addEventListener('click', ()=>{
+function rewind(){
   for(const e of SONG.events) e.hitIt = -1;
   SONG.T = playing ? -LEAD : 0;
   if(playing){ startSongAudio(); resync(); }
-  updateClock(true);
-});
-loopBtn.addEventListener('click', ()=>{
+}
+function setLoop(on){
+  if(on === SONG.loop) return;
   if(SONG.loop && SONG.T > 0) SONG.T = songLocal(SONG.T);
-  SONG.loop = !SONG.loop; if(CUR) CUR.loop = SONG.loop;
-  loopBtn.setAttribute('aria-pressed', String(SONG.loop));
+  SONG.loop = on; if(CUR) CUR.loop = on;
   if(playing){ startSongAudio(); resync(); }
-});
-document.getElementById('resetView').addEventListener('click', ()=>{ if(DIR.on) setDirector(false); resetOrbit(); });
-const bpmIn = document.getElementById('bpm'), bpmV = document.getElementById('bpmV');
-function speedLabel(){ bpmV.textContent = (SONG.mode === 'audio' ? '≈' : '') + Math.round(SONG.bpm*SONG.rate) + ' BPM'; }
-bpmIn.addEventListener('input', ()=>{
-  const r = +bpmIn.value/100;
-  if(songSrc && SONG.T >= 0){   // 正在放歌：换个锚点接着算时间，直接改播放速度（音高跟着变）
+  emit('state', state());
+}
+const speedLabel = () => (SONG.mode === 'audio' ? '≈' : '') + Math.round(SONG.bpm*SONG.rate) + ' BPM';
+function setSpeed(pct){         // 速度（百分比）：正在放歌就换个锚点接着算时间，直接改播放速度（音高跟着变）
+  const r = pct/100;
+  if(songSrc && SONG.T >= 0){
     const now = actx.currentTime;
     SONG.anchorT += (now - SONG.anchorCtx)*SONG.rate; SONG.anchorCtx = now;
     songSrc.playbackRate.setValueAtTime(r, now); SONG.rate = r;
   } else { SONG.rate = r; if(songSrc) startSongAudio(); }
-  speedLabel();
-});
-const drumVolIn = document.getElementById('drumVol'), drumVolV = document.getElementById('drumVolV');
-drumVolIn.addEventListener('input', ()=>{ drumVol = drumVolIn.value/100; drumVolV.textContent = drumVolIn.value; if(master) master.gain.setTargetAtTime(0.5*drumVol/0.7, actx.currentTime, 0.02); });
-const songVolIn = document.getElementById('songVol'), songVolV = document.getElementById('songVolV'), songVolL = document.getElementById('songVolL');
-songVolIn.addEventListener('input', ()=>{ songVol = songVolIn.value/100; songVolV.textContent = songVolIn.value; if(songGain) songGain.gain.setTargetAtTime(songVol, actx.currentTime, 0.02); });
-const tuneIn = document.getElementById('tune'), tuneV = document.getElementById('tuneV');
-tuneIn.addEventListener('input', ()=>{ tuneMul = tuneIn.value/100; tuneV.textContent = tuneIn.value+'%'; });
-document.addEventListener('keydown', e=>{
-  if(e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-  const tg = e.target, tag = tg && tg.tagName;
-  if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'SUMMARY' || tag === 'SELECT' || (tg && tg.isContentEditable)) return;
-  e.preventDefault(); setPlaying(!playing);
-});
+  return speedLabel();
+}
+function setDrumVol(v){ drumVol = v/100; if(master) master.gain.setTargetAtTime(0.5*drumVol/0.7, actx.currentTime, 0.02); }
+function setSongVol(v){ songVol = v/100; if(songGain) songGain.gain.setTargetAtTime(songVol, actx.currentTime, 0.02); }
+function setTune(pct){ tuneMul = pct/100; }
 
 // ---------- 星轨：时间往左流，鼓点是星星，左边那颗四芒星是“现在” ----------
 const laneCv = document.getElementById('lane'), lc = laneCv.getContext('2d');
-const ovCv = document.getElementById('ovw'), oc = ovCv.getContext('2d');
 const LH = 44, PPS = 40, OW = 320, OH = 8;
 let LW = 320, PHX = 76;
 // 窄屏上星轨少显示几秒、像素放大一点，鼓点才看得清
-function fitLane(){ const w = laneCv.clientWidth || 960, nw = Math.max(150, Math.min(320, Math.round(w/3))); if(nw !== LW){ LW = nw; PHX = Math.round(nw*0.24); laneCv.width = nw; laneCv.style.aspectRatio = nw + '/' + LH; } }
-fitLane(); window.addEventListener('resize', fitLane);
+// 星轨：高度固定 44 格，每格放大成整数倍的屏幕像素；宽度跟着窗口走，越宽看到的秒数越多
+function fitLane(){ const w = laneCv.clientWidth || 960, k = Math.max(1, Math.round((laneCv.clientHeight || 88)/LH)), nw = Math.max(150, Math.round(w/k)); if(nw !== LW){ LW = nw; PHX = Math.round(nw*0.24); laneCv.width = nw; } }
+fitLane(); new ResizeObserver(fitLane).observe(laneCv);
 const LROW = {crash:8, hihat:15, snare:22, tom1:29, tom2:29, floor:29, kick:37};
-const LCOL = {crash:'#ffd23a', hihat:'#fff1a6', snare:'#ffffff', tom1:'#e2c8ff', tom2:'#c890ff', floor:'#a77cf6', kick:'#ff8fb2'};
+const LCOL = {crash:'#e7c03c', hihat:'#f2e396', snare:'#ffffff', tom1:'#d2b2f5', tom2:'#ba83f0', floor:'#9b74e4', kick:'#f083a5'};
 const LSZ = {hihat:2, snare:3, tom1:3, tom2:3, floor:3, kick:4};
 let _ls = 11; const lrand = ()=>((_ls = (_ls*16807) % 2147483647) - 1)/2147483646;
-const SKY = Array.from({length:80}, ()=>({x:lrand()*640, y:1 + Math.floor(lrand()*(LH - 2)), ph:lrand()*6.28, b:0.3 + 0.7*lrand()}));
+const SKY = Array.from({length:200}, ()=>({x:lrand()*1600, y:1 + Math.floor(lrand()*(LH - 2)), ph:lrand()*6.28, b:0.3 + 0.7*lrand()}));
 const STAR7 = ['...#...', '...#...', '..###..', '#######', '..###..', '...#...', '...#...'];
 const STAR5 = ['..#..', '.###.', '#####', '.###.', '..#..'];
 function glyph(ctx, G, cx, cy, col){ ctx.fillStyle = col; const o = G.length >> 1; G.forEach((row, j)=>{ for(let i=0;i<row.length;i++) if(row[i] === '#') ctx.fillRect(cx - o + i, cy - o + j, 1, 1); }); }
@@ -2250,12 +2224,12 @@ function envAt(t){
 }
 function drawLane(){
   const T = SONG.T, tA = T - PHX/PPS, tB = T + (LW - PHX)/PPS;
-  const g = lc.createLinearGradient(0, 0, 0, LH); g.addColorStop(0, '#191b55'); g.addColorStop(1, '#30358f');
+  const g = lc.createLinearGradient(0, 0, 0, LH); g.addColorStop(0, '#1e1f39'); g.addColorStop(1, '#363960');
   lc.fillStyle = g; lc.fillRect(0, 0, LW, LH);
   lc.fillStyle = 'rgba(176,164,255,0.14)';                      // 银河：歌的响度（或鼓点的疏密）
   for(let x=0; x<LW; x+=2){ const h = Math.round(envAt(tA + x/PPS)*(LH - 8)*0.5); if(h > 0) lc.fillRect(x, (LH >> 1) - h, 2, 2*h); }
   for(const st of SKY){                                          // 远处的星星慢慢漂
-    const x = Math.floor(((st.x - T*5) % 640 + 640) % 640); if(x >= LW) continue;
+    const x = Math.floor(((st.x - T*5) % 1600 + 1600) % 1600); if(x >= LW) continue;
     const a = st.b*(0.25 + 0.3*Math.sin(simT*1.7 + st.ph));
     if(a > 0.05){ lc.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; lc.fillRect(x, st.y, 1, 1); }
   }
@@ -2293,77 +2267,22 @@ function drawLane(){
     }
   }
   lc.fillStyle = 'rgba(255,241,166,0.32)'; lc.fillRect(PHX, 0, 1, LH);   // 播放头
-  glyph(lc, STAR7, PHX, 4, '#6e1f5e'); glyph(lc, ['.#.', '###', '.#.'], PHX, 4, '#ffd23a');
-  lc.fillStyle = '#ffd23a'; lc.fillRect(PHX, 1, 1, 7); lc.fillRect(PHX - 3, 4, 7, 1); lc.fillStyle = '#fff4a8'; lc.fillRect(PHX, 4, 1, 1);
-}
-let OVENV = new Float32Array(OW);
-function computeOverview(){
-  const ov = new Float32Array(OW), E = SONG.env;
-  for(let x=0; x<OW; x++){
-    const a = Math.floor(x/OW*SONG.dur/E.dt), b = Math.max(a + 1, Math.floor((x + 1)/OW*SONG.dur/E.dt));
-    let m = 0; for(let i=a; i<b && i<E.v.length; i++) m = Math.max(m, E.v[i]); ov[x] = m;
-  }
-  OVENV = ov;
-}
-function drawOverview(){
-  const loc = SONG.T < 0 ? 0 : songLocal(SONG.T), px = Math.min(OW - 1, Math.round(loc/SONG.dur*(OW - 1)));
-  oc.fillStyle = '#15174a'; oc.fillRect(0, 0, OW, OH);
-  for(let x=0; x<OW; x++){ const h = Math.max(1, Math.round(OVENV[x]*(OH - 2))); oc.fillStyle = x <= px ? '#ff8fb2' : '#5157bd'; oc.fillRect(x, OH - 1 - h, 1, h); }
-  oc.fillStyle = '#fff1a6'; oc.fillRect(px, 0, 1, OH);
-  if(px > 0) { oc.fillRect(px - 1, 3, 3, 2); }
+  glyph(lc, STAR7, PHX, 4, '#5e2553'); glyph(lc, ['.#.', '###', '.#.'], PHX, 4, '#e7c03c');
+  lc.fillStyle = '#e7c03c'; lc.fillRect(PHX, 1, 1, 7); lc.fillRect(PHX - 3, 4, 7, 1); lc.fillStyle = '#f2e797'; lc.fillRect(PHX, 4, 1, 1);
 }
 const fmtT = s => { s = Math.max(0, s); const m = Math.floor(s/60), ss = Math.floor(s % 60); return m + ':' + String(ss).padStart(2, '0'); };
-let _clk = '';
-function updateClock(force){
-  const loc = SONG.T < 0 ? 0 : Math.min(SONG.dur, songLocal(SONG.T)), str = fmtT(loc);
-  if(str === _clk && !force) return;
-  _clk = str; tCur.textContent = str;
-  ovCv.setAttribute('aria-valuenow', String(Math.round(100*loc/SONG.dur)));
-  ovCv.setAttribute('aria-valuetext', str + ' / ' + fmtT(SONG.dur));
-}
-// 进度条：点击、拖动跳转；方向键前后五秒
-let ovDrag = false;
-function ovSeek(e){ const r = ovCv.getBoundingClientRect(); seekTo(Math.max(0, Math.min(1, (e.clientX - r.left)/r.width))*SONG.dur); }
-ovCv.addEventListener('pointerdown', e=>{ ovDrag = true; ovCv.setPointerCapture(e.pointerId); ovSeek(e); });
-ovCv.addEventListener('pointermove', e=>{ if(ovDrag) ovSeek(e); });
-ovCv.addEventListener('pointerup', ()=>{ ovDrag = false; });
-ovCv.addEventListener('pointercancel', ()=>{ ovDrag = false; });
-ovCv.addEventListener('keydown', e=>{
-  const loc = SONG.T < 0 ? 0 : songLocal(SONG.T);
-  if(e.key === 'ArrowRight'){ e.preventDefault(); seekTo(loc + 5); }
-  else if(e.key === 'ArrowLeft'){ e.preventDefault(); seekTo(loc - 5); }
-  else if(e.key === 'Home'){ e.preventDefault(); seekTo(0); }
-});
 
 // ---------- 曲目单 ----------
-const tracksEl = document.getElementById('tracks'), msgEl = document.getElementById('msg');
-const jobEl = document.getElementById('job'), jobBar = document.getElementById('jobBar'), jobTxt = document.getElementById('jobTxt');
 const INST_CN = {kick:'底鼓', snare:'军鼓', hihat:'踩镲', crash:'吊镲', tom1:'高嗵', tom2:'中嗵', floor:'落地嗵'};
-function renderLib(){
-  tracksEl.textContent = '';
-  for(const S of LIB){
-    const li = document.createElement('li'), b = document.createElement('button');
-    b.type = 'button'; b.className = 'trk' + (S === CUR ? ' on' : '');
-    if(S === CUR) b.setAttribute('aria-current', 'true');
-    const k = document.createElement('span'), n = document.createElement('span'), m = document.createElement('span');
-    k.className = 'k'; n.className = 'n'; m.className = 'm';
-    k.textContent = S.kind; n.textContent = S.name; m.textContent = fmtT(S.dur) + ' · ' + Math.round(S.bpm) + ' BPM';
-    b.append(k, n, m); b.addEventListener('click', ()=>loadSong(S, true));
-    li.appendChild(b); tracksEl.appendChild(li);
-  }
-}
-function updateTrackUI(){
+function libInfo(){ return LIB.map((S, i)=>({i, name:S.name, kind:S.kind, dur:S.dur, bpm:Math.round(S.bpm), current:S === CUR})); }
+function songInfo(){
   const n = SONG.events.filter(e=>!e.drop).length;
-  trkName.textContent = SONG.name;
-  trkMeta.textContent = SONG.kind + ' · ' + (SONG.mode === 'audio' ? '约 ' : '') + Math.round(SONG.bpm) + ' BPM · ' + n + ' 下';
-  tDur.textContent = fmtT(SONG.dur);
-  loopBtn.setAttribute('aria-pressed', String(SONG.loop));
-  songVolL.hidden = SONG.mode !== 'audio';
-  bpmIn.value = Math.round(SONG.rate*100); speedLabel();
-  renderLib(); updateClock(true);
+  return {name:SONG.name, kind:SONG.kind, mode:SONG.mode, dur:SONG.dur, loop:SONG.loop, rate:SONG.rate, speedLabel:speedLabel(),
+    meta:SONG.kind + ' · ' + (SONG.mode === 'audio' ? '约 ' : '') + Math.round(SONG.bpm) + ' BPM · ' + n + ' 下'};
 }
+function updateTrackUI(){ emit('song', songInfo()); emit('lib', libInfo()); emit('state', state()); }
 function loadSong(S, autoplay){
-  stopSongAudio(); applySong(S); computeOverview(); updateTrackUI(); resync();
+  stopSongAudio(); applySong(S); updateTrackUI(); resync();
   if(autoplay || playing) setPlaying(true);
 }
 function summary(S){
@@ -2371,12 +2290,8 @@ function summary(S){
   for(const e of S.events){ if(e.drop){ drop++; continue; } c[e.i] = (c[e.i] || 0) + 1; }
   return Object.keys(INST_CN).filter(k=>c[k]).map(k=>INST_CN[k] + ' ' + c[k]).join('、') + (drop ? '；另有 ' + drop + ' 下太挤，没打' : '');
 }
-function job(txt, p){
-  if(txt === null){ jobEl.hidden = true; return; }
-  jobEl.hidden = false; jobTxt.textContent = txt + (p === undefined ? '' : ' ' + Math.round(p*100) + '%');
-  jobBar.style.width = Math.round((p || 0)*100) + '%';
-}
-function msg(txt, err){ msgEl.textContent = txt; msgEl.classList.toggle('err', !!err); }
+function job(txt, p){ emit('job', txt === null ? null : {txt, p}); }
+function msg(txt, err){ emit('msg', {txt, err:!!err}); }
 function addAndPlay(S, replace){
   prepSong(S);
   const i = replace ? LIB.findIndex(replace) : -1;
@@ -2419,49 +2334,12 @@ async function handleFile(f){
     job(null); msg(err && err.message ? err.message : '读不了这个文件。', true);
   }
 }
-// ---------- 菜单：曲目、调节、刚才这一下收在播放器下面的二级菜单里 ----------
-const menuEl = document.getElementById('menu'), menuBtn = document.getElementById('menuBtn'), TABS = [...menuEl.querySelectorAll('[role=tab]')];
-function selectTab(id, focus){
-  for(const t of TABS){
-    const on = t.id === id;
-    t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1;
-    document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
-    if(on && focus) t.focus();
-  }
-  try{ localStorage.setItem('squiddle.tab', id); } catch(_){}
-}
-function openMenu(on, tab){
-  if(tab) selectTab(tab);
-  menuEl.hidden = !on; menuBtn.setAttribute('aria-expanded', String(on));
-}
-try{ const t = localStorage.getItem('squiddle.tab'); if(TABS.some(x=>x.id === t)) selectTab(t); } catch(_){}
-menuBtn.addEventListener('click', ()=>openMenu(menuEl.hidden));
-TABS.forEach((t, i)=>{
-  t.addEventListener('click', ()=>selectTab(t.id));
-  t.addEventListener('keydown', e=>{
-    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if(!d) return;
-    e.preventDefault(); selectTab(TABS[(i + d + TABS.length) % TABS.length].id, true);
-  });
-});
-document.addEventListener('keydown', e=>{
-  if(e.key !== 'Escape' || menuEl.hidden) return;
-  const inside = menuEl.contains(document.activeElement); openMenu(false); if(inside) menuBtn.focus();
-});
-const fileIn = document.getElementById('file'), dropEl = document.getElementById('drop');
-fileIn.addEventListener('change', ()=>{ const f = fileIn.files[0]; fileIn.value = ''; handleFile(f); });
-const hasFiles = e => !!(e.dataTransfer && [...e.dataTransfer.types].includes('Files'));
-let dragN = 0;
-document.addEventListener('dragenter', e=>{ if(hasFiles(e)){ if(!dragN) openMenu(true, 'tab-lib'); dragN++; dropEl.classList.add('drag'); } });
-document.addEventListener('dragleave', e=>{ if(hasFiles(e) && --dragN <= 0){ dragN = 0; dropEl.classList.remove('drag'); } });
-document.addEventListener('dragover', e=>{ if(hasFiles(e)) e.preventDefault(); });
-document.addEventListener('drop', e=>{ if(!hasFiles(e)) return; e.preventDefault(); dragN = 0; dropEl.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
-const tabText = document.getElementById('tabText');
-document.getElementById('tabGo').addEventListener('click', ()=>{
+function loadTabText(text){
   try{
-    const S = parseTab(tabText.value); S.name = '粘贴的鼓谱'; S.pasted = true;
-    addAndPlay(S, X=>X.pasted); msg('照着粘贴的鼓谱打：' + summary(S) + '。');
-  } catch(err){ msg(err.message, true); }
-});
+    const S = parseTab(text); S.name = '粘贴的鼓谱'; S.pasted = true;
+    addAndPlay(S, X=>X.pasted); msg('照着粘贴的鼓谱打：' + summary(S) + '。'); return true;
+  } catch(err){ msg(err.message, true); return false; }
+}
 
 // ---------- 文本鼓谱：每行一件乐器，x/o 一下，- 空拍，竖线分小节 ----------
 const TAB_ALIAS = {bd:'kick', b:'kick', k:'kick', kd:'kick', kick:'kick', bass:'kick', '底鼓':'kick', '底':'kick',
@@ -2732,8 +2610,8 @@ async function analyzeAudio(buf, prog){
 }
 
 // 曲目单里预先放一段示例鼓谱
-try{ const EX = parseTab(tabText.value); EX.name = '示例鼓谱 · 四小节带过门'; EX.kind = '示例'; LIB.push(prepSong(EX)); } catch(_){}
-computeOverview(); updateTrackUI();
+const EXAMPLE_TAB = `BPM 108\nCC|x---------------|----------------|x---------------|----------------|\nHH|--x-x-x-x-x-x-x-|x-x-x-x-x-x-x-x-|--x-x-x-x-x-x-x-|x-x-x-x---------|\nSD|----o-------o---|----o-------o--g|----o-------o---|----o---o-------|\nT1|----------------|----------------|----------------|----------o-----|\nT2|----------------|----------------|----------------|------------o---|\nFT|----------------|----------------|----------------|--------------oo|\nBD|o-------o-o-----|o-----o-o-------|o-------o-o-----|o-----o---------|`;
+try{ const EX = parseTab(EXAMPLE_TAB); EX.name = '示例鼓谱 · 四小节带过门'; EX.kind = '示例'; LIB.push(prepSong(EX)); } catch(_){}
 
 // 左键拖动旋转，右键 / 中键 / Shift+拖动平移，滚轮或双指缩放，双指一起拖平移；没拖动的左键单击 = 点选落点
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -2743,6 +2621,7 @@ function aimAt(clientX, clientY){
   ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects(clickables, false)[0]; if(!hit) return;
   const I = hit.object.userData.inst, L = limbBy(OWNER[I.key]);
+  emit('aim', {x:clientX, y:clientY, key:I.key});
   const loc = I.g.worldToLocal(hit.point.clone()); loc.y = I.y0;
   const rr = Math.hypot(loc.x, loc.z), lim = I.R*0.72; if(rr > lim){ loc.x *= lim/rr; loc.z *= lim/rr; }
   const nh = L.nextHit;
@@ -2757,7 +2636,7 @@ function aimAt(clientX, clientY){
 const ptrs = new Map(); let moved = 0, pinch0 = 0, r0 = 0, panMode = false, mid0x = 0, mid0y = 0;
 const _pr = new V3(), _pu = new V3();
 function panBy(dx, dy){                      // 按屏幕方向平移看向点：手拖多少，画面就跟着走多少
-  const h = canvas.clientHeight || 360, k = 2*clampR(orbit.r)*Math.tan(FOV0*Math.PI/360)/h;
+  const h = canvas.clientHeight || 360, k = 2*clampR(orbit.r)*Math.tan(FOV0*Math.PI/360)*FOVK/h;
   _pr.setFromMatrixColumn(camera.matrixWorld, 0); _pu.setFromMatrixColumn(camera.matrixWorld, 1);
   orbit.target.addScaledVector(_pr, -dx*k).addScaledVector(_pu, dy*k); clampTarget();
 }
@@ -2791,4 +2670,31 @@ canvas.addEventListener('pointerup', endPtr);
 canvas.addEventListener('pointercancel', endPtr);
 canvas.addEventListener('wheel', e=>{ e.preventDefault(); handOff(); orbit.r = clampR(orbit.r*Math.exp(e.deltaY*0.0012)); }, {passive:false});
 Object.assign(window.__dbg, {SONG, LIB, loadSong, parseTab, parseMidi, analyzeAudio, handleFile, seekTo, setPlaying, clock:()=>[simT, SONG.T], setRearm:v=>{REARM=v;}, setLift:v=>{LIFT0=v;}, HITS});
+
+// ---------- Squiddle：界面（js/ui.js）只通过这个接口和舞台打交道 ----------
+// 事件：state {playing, loop, director, spot} · song {name, kind, mode, dur, loop, rate, speedLabel, meta} · lib [{i, name, kind, dur, bpm, current}]
+//       hit {key, label, drum, vel, rn, x, z, speed, parts} · aim {x, y, key}（点中了鼓，屏幕坐标） · camera '导播 · 全景' · job {txt, p} | null · msg {txt, err}
+new ResizeObserver(()=>fitView(canvas.clientWidth, canvas.clientHeight)).observe(canvas);
+fitView(canvas.clientWidth, canvas.clientHeight);
+window.Squiddle = {
+  on(type, f){ (BUS[type] = BUS[type] || []).push(f); },
+  state, song:songInfo, lib:libInfo, camera:()=>camLabel,
+  time(){ return {t:SONG.T < 0 ? 0 : Math.min(SONG.dur, songLocal(SONG.T)), dur:SONG.dur}; },
+  fps:()=>FPS,
+  play(on){ setPlaying(on === undefined ? !playing : !!on); },
+  seek:seekTo, rewind, setLoop,
+  setDirector(on){ setDirector(!!on); },
+  setSpot(on){ SPOT.on = !!on; emit('state', state()); },
+  resetView(){ if(DIR.on) setDirector(false); resetOrbit(); },
+  setSpeed, setDrumVol, setSongVol, setTune,
+  setFrameCap(n){ CAP = n > 0 ? n : 0; },
+  loadFile:handleFile, loadTabText,
+  selectSong(i){ const S = LIB[i]; if(S) loadSong(S, true); },
+  removeSong(i){
+    const S = LIB[i]; if(!S || LIB.length <= 1) return;
+    LIB.splice(i, 1);
+    if(S === CUR) loadSong(LIB[Math.min(i, LIB.length - 1)], playing); else emit('lib', libInfo());
+  },
+  unlockAudio, exampleTab:EXAMPLE_TAB, view:canvas,
+};
 })();
