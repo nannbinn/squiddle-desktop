@@ -1,0 +1,133 @@
+/* 布局：像素舞台占满宽度，紧贴着下面一条深靛蓝的星空播放器（星轨 + 进度条），再往下是曲目面板和读数。
+   v11 起整页和所有面板统一成"刚才这一下"那种深靛蓝像素星空；舞台平时是白底灰网格，开聚光灯时暗下来融进页面 */
+:root{
+  --ink:#1a1230;        /* 描边与最深底色 */
+  --night:#1f2263;      /* 页面底：深靛蓝夜空（聚光灯暗场也用这个颜色） */
+  --sky:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='64' shape-rendering='crispEdges'%3E%3Cg fill='%23f3efff'%3E%3Crect x='7' y='9' width='1' height='1' opacity='.75'/%3E%3Crect x='31' y='3' width='1' height='1' opacity='.45'/%3E%3Crect x='52' y='17' width='1' height='1' opacity='.6'/%3E%3Crect x='84' y='8' width='1' height='1' opacity='.4'/%3E%3Crect x='18' y='37' width='1' height='1' opacity='.5'/%3E%3Crect x='44' y='50' width='1' height='1' opacity='.7'/%3E%3Crect x='77' y='29' width='1' height='1' opacity='.55'/%3E%3Crect x='91' y='55' width='1' height='1' opacity='.45'/%3E%3Crect x='3' y='58' width='1' height='1' opacity='.35'/%3E%3Crect x='61' y='60' width='1' height='1' opacity='.4'/%3E%3C/g%3E%3Cg fill='%23ffd23a'%3E%3Crect x='66' y='40' width='1' height='3'/%3E%3Crect x='65' y='41' width='3' height='1'/%3E%3Crect x='24' y='20' width='1' height='1'/%3E%3C/g%3E%3C/svg%3E");
+  --skyBg:linear-gradient(180deg,#2a2e7a,#1f2263);  /* 面板：稍亮一点的夜空渐变 */
+  --panel:#2a2e7a;      /* 面板 */
+  --line:#4a4fb0;       /* 曲目描边 */
+  --hair:#a39de6;       /* 1px 亮分割线：舞台、播放器、面板的边 */
+  --accent:#ffd23a;     /* 读数强调、焦点框：星黄 */
+  --pink:#ff8fb2;       /* 果冻粉：按钮、已播放的进度 */
+  --star:#ffd23a;       /* 四芒星黄 */
+  --pale:#fff1a6;       /* 星光浅黄：时间、播放头 */
+  --indigo:#262a72;     /* 星空鼓壳的深靛蓝：播放器底 */
+  --indigo2:#3d42a8;
+  --moon:#f3efff;       /* 夜空上的主文字 */
+  --lilac:#bdb6ec;      /* 夜空上的次要文字 */
+  --wash:rgba(243,239,255,.07);  /* 拖放区、进度条底 */
+  --brass:#f2c14e;
+  --skin:#fff1a6;       /* 卡片标题：星光浅黄 */
+  --mist:#bdb6ec;       /* 次要文字 */
+  --fg:#f3efff;
+  --err:#ff8a80;
+  --f-display:"ZCOOL QingKe HuangYou","PingFang SC","Microsoft YaHei",sans-serif;
+  --f-pixel:"Silkscreen",ui-monospace,Menlo,monospace;
+  --f-body:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--sky) 0 0/192px 128px repeat,var(--night);color:var(--fg)}
+[hidden]{display:none!important}
+body{font-family:var(--f-body);font-size:15px;line-height:1.6;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:980px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 16px}
+h1{margin:0 0 0 -8px;line-height:0;flex:0 1 324px;min-width:0}
+#logo{display:block;width:100%;max-width:324px;height:auto;aspect-ratio:162/58;image-rendering:pixelated}
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:var(--ink);border:1px solid var(--hair);image-rendering:pixelated}
+.stage canvas{width:100%;height:100%;display:block;image-rendering:pixelated;cursor:grab;touch-action:none}
+.stage canvas:active{cursor:grabbing}
+.vplabel{position:absolute;top:3%;left:2%;font-size:clamp(10px,1.6vw,13px);color:#8a8698;pointer-events:none;letter-spacing:.06em;transition:color .6s}
+.stage.spot .vplabel{color:var(--lilac)}
+#start{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(26,18,48,.35);border:0;color:var(--fg);font:inherit;cursor:pointer}
+#start[hidden]{display:none}
+#start span{font-family:var(--f-display);font-size:clamp(20px,4vw,30px);background:var(--pink);color:var(--ink);padding:10px 22px;box-shadow:4px 4px 0 var(--ink)}
+#start:focus-visible span{outline:3px solid var(--accent);outline-offset:3px}
+
+/* 星空播放器：贴在舞台下沿 */
+.deck{margin-top:-16px;background:var(--indigo);border:1px solid var(--hair);border-top:0;padding:10px 12px 12px;display:grid;gap:8px;color:var(--moon);min-width:0}
+.transport{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;min-width:0}
+.tbtn{font:inherit;font-size:13px;background:var(--pink);color:var(--ink);border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);min-width:36px;height:32px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.tbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+.tbtn:focus-visible{outline:2px solid var(--pale);outline-offset:2px}
+.tbtn svg{width:14px;height:14px;display:block;shape-rendering:crispEdges;fill:currentColor}
+.tbtn .i-pause{display:none}
+.tbtn.on .i-play{display:none}
+.tbtn.on .i-pause{display:block}
+.tbtn.ghost{background:var(--indigo2);color:var(--moon)}
+.tbtn[aria-pressed="true"]{background:var(--pale);color:var(--ink)}
+.tbtn[aria-pressed="false"]{background:var(--indigo2);color:var(--lilac)}
+.nowp{display:grid;min-width:0;flex:1 1 180px;line-height:1.3}
+.nowp b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nowp span{font-size:12px;color:var(--lilac);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clock{font-family:var(--f-pixel);font-size:13px;font-variant-numeric:tabular-nums;color:var(--pale);display:flex;gap:6px;white-space:nowrap}
+.clock span{color:var(--lilac)}
+#lane,#ovw{width:100%;max-width:100%;height:auto;display:block;image-rendering:pixelated}
+#lane{aspect-ratio:320/44;border:1px solid var(--hair)}
+#ovw{aspect-ratio:320/8;cursor:pointer;touch-action:none}
+#ovw:focus-visible{outline:2px solid var(--pale);outline-offset:3px}
+.legend{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:2px 14px;font-size:12px;color:var(--lilac)}
+.legend li{display:flex;align-items:center;gap:6px}
+.legend i{width:8px;height:8px;background:var(--c)}
+.legend .hol{background:none;border:1px solid var(--lilac);width:6px;height:6px}
+
+.bar{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+button.px{font:inherit;font-size:14px;background:var(--pink);color:var(--ink);border:2px solid var(--ink);padding:6px 14px;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+button.px:hover{background:#ffa9c6}
+button.px:active{transform:translate(1px,1px);box-shadow:2px 2px 0 var(--ink)}
+button.px:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label{display:flex;align-items:center;gap:8px;color:var(--mist);font-size:14px}
+label output{font-family:var(--f-pixel);color:var(--fg);min-width:3.5em;font-variant-numeric:tabular-nums}
+.fpsr{display:flex;align-items:center;gap:8px;color:var(--mist);font-size:14px}
+.fpsr output{font-family:var(--f-pixel);color:var(--accent);min-width:4.5em;font-variant-numeric:tabular-nums}
+input[type=range]{accent-color:var(--pink);width:110px}
+.readout{font-family:var(--f-pixel);font-size:13px;color:var(--fg);display:flex;flex-wrap:wrap;gap:4px 18px;font-variant-numeric:tabular-nums;margin-bottom:8px}
+.readout b{color:var(--accent);font-weight:400}
+#modes{width:100%;height:auto;aspect-ratio:320/110;display:block;image-rendering:pixelated;background:var(--night)}
+.hint{color:var(--mist);font-size:13px;margin:6px 0 0}
+
+/* 曲目面板 */
+.lib{display:grid;gap:10px}
+.lib h2{margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+.drop{display:flex;align-items:center;gap:12px;padding:14px;border:2px dashed var(--lilac);background:rgba(21,23,74,.78);cursor:pointer;color:var(--fg);font-size:14px;transition:background .15s}
+.drop:hover,.drop.drag{background:#2f347f;border-color:var(--pale)}
+.drop.drag{border-style:solid}
+#file:focus-visible + .drop{outline:2px solid var(--accent);outline-offset:2px}
+.drop svg{width:32px;height:32px;flex:none;shape-rendering:crispEdges}
+.drop b{display:block;font-weight:600}
+.drop span span{display:block;color:var(--mist);font-size:13px}
+.formats{margin:-4px 0 0;font-size:12px;color:var(--mist)}
+.job{display:grid;gap:4px;font-size:13px;color:var(--fg)}
+.jobbar{height:10px;background:var(--wash);border:2px solid var(--ink)}
+.jobbar i{display:block;height:100%;width:0;background:var(--pink)}
+.msg{margin:0;font-size:13px;color:var(--fg)}
+.msg:empty{display:none}
+.msg.err{color:var(--err)}
+.tracks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.trk{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;text-align:left;font:inherit;font-size:14px;background:rgba(21,23,74,.82);border:2px solid var(--line);padding:6px 10px;cursor:pointer;color:var(--fg)}
+.trk:hover{border-color:var(--lilac)}
+.trk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.trk.on{border-color:var(--pale);box-shadow:3px 3px 0 var(--ink);background:var(--indigo2)}
+.trk .k{font-size:11px;line-height:1.6;padding:0 6px;background:#15174a;color:var(--pale);letter-spacing:.06em;white-space:nowrap}
+.trk .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.trk .m{font-family:var(--f-pixel);font-size:11px;color:var(--mist);font-variant-numeric:tabular-nums;white-space:nowrap}
+.paste summary{cursor:pointer;font-size:14px;color:var(--fg)}
+.paste[open] summary{margin-bottom:8px}
+.paste textarea{width:100%;box-sizing:border-box;font-family:var(--f-mono);font-size:12px;line-height:1.5;border:2px solid var(--ink);padding:8px;background:#15174a;color:var(--fg);resize:vertical;overflow:auto}
+.paste .row{display:flex;gap:10px;align-items:center;margin-top:8px}
+@media (prefers-reduced-motion:reduce){.drop{transition:none}}
+/* 刚才这一下：和播放器同一片夜空 */
+.sky .readout{color:var(--lilac)}
+.sky #modes{background:#1c1f57;border:1px solid var(--hair);max-width:560px}
+/* 二级菜单：曲目、调节、刚才这一下收在播放器下面，点"菜单"展开，顶上一排页签切换 */
+.menu{margin-top:-16px;background:var(--sky) 37px 21px/192px 128px repeat,var(--skyBg);border:1px solid var(--hair);border-top:0;padding:0 12px 14px;display:grid;gap:12px;min-width:0;color:var(--fg)}
+.mtabs{display:flex;margin:0 -12px;padding:0 6px;border-bottom:1px solid var(--hair);overflow-x:auto;scrollbar-width:none}
+.mtab{flex:none;font-family:var(--f-display);font-size:18px;letter-spacing:.04em;background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;color:var(--lilac);padding:8px 12px 5px;cursor:pointer}
+.mtab:hover{color:var(--moon)}
+.mtab[aria-selected="true"]{color:var(--pale);border-bottom-color:var(--pale)}
+.mtab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pane{min-width:0}
+.tbtn[aria-expanded="true"]{background:var(--pale);color:var(--ink)}
+.tbtn[aria-expanded="false"]{background:var(--indigo2);color:var(--lilac)}
