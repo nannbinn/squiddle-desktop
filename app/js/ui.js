@@ -469,7 +469,7 @@ document.addEventListener('keydown', e => {
   else if(e.key === 'Escape' && isOpen()) openMenu(false);
 });
 
-/* ---------- 开场：ASCII 鱿鱼打鼓 + 进度 ---------- */
+/* ---------- 开场：字符显影背景 + ASCII 鱿鱼打鼓 + 进度 ---------- */
 const SQ = [
 [ '        <i>*</i>        ', '       /^\\       ', '      / <i>*</i> \\      ', '     |  <i>*</i>  |     ', '     | <i>***</i> |     ',
   '      \\___/      ', '      (o o)      ', '   ,--/|||\\--,   ', '  <u>[==]</u>  |  <u>[==]</u>  ', ' <u>(____)</u>/_\\<u>(____)</u> ' ],
@@ -480,13 +480,185 @@ const SQ = [
 ];
 const STEPS = ['调鼓皮', '接音箱', '铺星空', '叫醒鱿鱼'];
 const splash = $('#splash'), sq = $('#sq'), loadStep = $('#loadStep'), loadBar = $('#loadBar');
+let sqFrame = 0;     // 现在画第几帧鱿鱼（背景层按它画）
+
+/* 字符显影：整片背景是很小的字符格，平时只有暗色乱码慢慢变；一块不规则的亮区游过时，
+   乱码闪烁着变成真实的小字（鱿鱼的故事），亮区走后再慢慢退回乱码。算法照 loupe-loading.html 移植。 */
+const Glyphs = (() => {
+  const CFG = {
+    cellW: 6, cellH: 13,                 // 字符格：12px 像素字，横 6 格一个西文字、两格一个汉字
+    font: '12px "Fusion Pixel 12px Proportional SC"',
+    band: 0.22, thMin: 0.35, thMax: 0.85,
+    rise: 14, fall: 0.85, radius: 40,
+    fastHz: 16, slowHz: 1.2, dimAlpha: 0.1, fps: 30,
+    idleMs: 2500, follow: 6,
+  };
+  const CH = 'abcdefghijklmnopqrstuvwxyz<>/\\|=+-_*:;.,';
+  const STORY = [
+    '星空背面有一片很浅的海，海里住着一只粉色的果冻鱿鱼，名字叫 Squiddle。',
+    '它有八条软管一样的触手，每一条都想打鼓：两条管镲，两条管嗵鼓，一条专门踩底鼓，剩下的轮流敲军鼓。',
+    '白天它在礁石上数气泡，晚上把落进海里的星星捡起来，擦亮，别在胸口当拍子。',
+    '踩镲是潮水，军鼓是心跳，底鼓是远处鲸鱼翻身时的一声叹气。',
+    '它的鼓是用沉船的木板和深海的夜色做的，鼓面上撒满了碎星，打一下就亮一下。',
+    '音箱是它从海沟里拖上来的，低音单元一响，水母们就排成一圈慢慢地摇。',
+    '它不怕打错拍子，只怕没人听；所以每天开场前，它都会先调好鼓皮，接好音箱，铺开星空，再把自己叫醒。',
+    '粉色的披肩是外婆织的，背后缝着北斗七星，铃铛一响，就是要开始了。',
+    '如果你把歌拖进来，它会把每一个鼓点都记在星轨上，一颗一颗地打给你听。',
+    '一、二、三、四。',
+  ].join('　　');
+  const CONT = '\u0001';                  // 汉字占两格，后一格用这个记号
+  const cv = $('#glyphs'), ctx = cv.getContext('2d');
+  const slowCv = document.createElement('canvas'), sctx = slowCv.getContext('2d');
+  let W = 0, H = 0, dpr = 1, cols = 0, rows = 0, x0 = 0, y0 = 0, n = 0;
+  let real = [], th, h, ph, slowK, mask, pointer = null, lens = null, t = 0, last = 0, running = false;
+  let col = {}, squid = null, sqC0 = 0, sqR0 = 0;
+  const hash = (i, k) => {
+    let x = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((k + 0x632be5ab) | 0, 0xc2b2ae35);
+    x ^= x >>> 15; x = Math.imul(x, 0x27d4eb2d); x ^= x >>> 13;
+    return x >>> 0;
+  };
+  // 鱿鱼三帧：拆成逐格的字符和颜色（<i> 星星黄、<u> 鼓紫、其余粉）
+  const SQG = SQ.map(fr => fr.map(line => {
+    const out = []; let k = 'p';
+    line.replace(/<(\/?)([iu])>|([^<])/g, (m, cl, tag, c) => { if(tag) k = cl ? 'p' : tag; else out.push([c, k]); return ''; });
+    return out;
+  }));
+  const SQW = Math.max(...SQG.flat().map(l => l.length)), SQH = SQG[0].length;
+  sq.style.width = SQW*CFG.cellW + 'px'; sq.style.height = SQH*CFG.cellH + 'px';
+  // 鱿鱼占的格子（三帧合起来，每行从第一个到最后一个非空字符，左右各多留一格）不画背景字
+  const sqSpan = [];
+  for(let r=0; r<SQH; r++){
+    let a = SQW, b = -1;
+    SQG.forEach(fr => fr[r].forEach(([c], i) => { if(c !== ' '){ a = Math.min(a, i); b = Math.max(b, i); } }));
+    sqSpan.push([a - 1, b + 1]);
+  }
+  function readColors(){
+    const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
+    col = {real: '#ece7d8', fast: v('--pink'), slow: v('--dim'), p: v('--pink'), i: v('--star'), u: v('--violet')};
+  }
+  function build(){
+    const r = splash.getBoundingClientRect();
+    dpr = Math.max(1, Math.round(window.devicePixelRatio || 1)); W = r.width; H = r.height;
+    if(!W || !H) return false;
+    cv.width = slowCv.width = Math.round(W*dpr); cv.height = slowCv.height = Math.round(H*dpr);
+    // 让格子正好对齐鱿鱼占位框的左上角，鱿鱼就嵌在格子里
+    const s = sq.getBoundingClientRect(), cw = CFG.cellW, chh = CFG.cellH;
+    const ox = Math.round(s.left - r.left), oy = Math.round(s.top - r.top);
+    x0 = (ox % cw + cw) % cw - cw; y0 = (oy % chh + chh) % chh - chh;
+    cols = Math.ceil((W - x0)/cw); rows = Math.ceil((H - y0)/chh); n = cols*rows;
+    sqC0 = Math.round((ox - x0)/cw); sqR0 = Math.round((oy - y0)/chh);
+    // 故事：拆成格子（汉字两格），每一行从不同位置开始
+    const base = [];
+    for(const c of STORY + '　　'){ if(wide(c)) base.push(c, CONT); else base.push(c); }
+    const seq = [...base];
+    while(seq.length < cols*3) seq.push(...base);
+    real = new Array(n); th = new Float32Array(n); h = new Float32Array(n); ph = new Float32Array(n);
+    slowK = new Int32Array(n).fill(-1); mask = new Uint8Array(n);
+    for(let j=0; j<rows; j++){
+      let off = (j*137 + (hash(j, 7) % 97)) % (seq.length - cols);
+      if(seq[off] === CONT) off++;
+      for(let i=0; i<cols; i++){
+        let c = seq[off + i];
+        if(i === 0 && c === CONT) c = ' ';
+        if(i === cols - 1 && c !== CONT && wide(c)) c = ' ';
+        real[j*cols + i] = c;
+      }
+    }
+    for(let i=0; i<n; i++){ th[i] = CFG.thMin + Math.random()*(CFG.thMax - CFG.thMin); ph[i] = Math.random()*10; }
+    for(let i=0; i<n; i++) if(real[i] === CONT) th[i] = th[i - 1];     // 汉字两格同进同退
+    sqSpan.forEach(([a, b], r) => { const j = sqR0 + r; if(j < 0 || j >= rows) return;
+      for(let i = sqC0 + a; i <= sqC0 + b; i++) if(i >= 0 && i < cols) mask[j*cols + i] = 1; });
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0); sctx.clearRect(0, 0, W, H);
+    return true;
+  }
+  function target(x, y, p){
+    const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
+    if(d > CFG.radius*1.8) return 0;
+    const a = Math.atan2(dy, dx);
+    const R = CFG.radius*(1 + 0.26*Math.sin(3*a + t*1.7) + 0.14*Math.sin(5*a - t*2.3) + 0.08*Math.sin(8*a + t*0.9));
+    return Math.max(0, Math.min(1.25, (1 - d/R)*2.2));
+  }
+  const wander = () => ({x: W*(0.5 + 0.38*Math.sin(t*0.31)*Math.cos(t*0.17)), y: H*(0.5 + 0.34*Math.sin(t*0.23 + 1.3))});
+  function step(dt){
+    t += dt;
+    const live = pointer && performance.now() - pointer.at < CFG.idleMs;
+    const goal = live ? pointer : wander();
+    if(!lens) lens = {x: goal.x, y: goal.y};
+    const k = 1 - Math.exp(-dt*(live ? CFG.follow*2 : CFG.follow*0.35));
+    lens.x += (goal.x - lens.x)*k; lens.y += (goal.y - lens.y)*k;
+    const up = 1 - Math.exp(-dt*CFG.rise), down = dt*CFG.fall, R = CFG.radius*1.8;
+    const i0 = Math.max(0, Math.floor((lens.x - R - x0)/CFG.cellW)), i1 = Math.min(cols - 1, Math.ceil((lens.x + R - x0)/CFG.cellW));
+    const j0 = Math.max(0, Math.floor((lens.y - R - y0)/CFG.cellH)), j1 = Math.min(rows - 1, Math.ceil((lens.y + R - y0)/CFG.cellH));
+    for(let o=0; o<n; o++){
+      const i = o % cols, j = (o/cols) | 0;
+      const T = (i >= i0 && i <= i1 && j >= j0 && j <= j1) ? target(x0 + (i + .5)*CFG.cellW, y0 + (j + .5)*CFG.cellH, lens) : 0;
+      if(T > h[o]) h[o] += (T - h[o])*up; else if(h[o] > 0) h[o] = Math.max(T, h[o] - down);
+    }
+  }
+  function draw(){
+    const cw = CFG.cellW, chh = CFG.cellH, fastK = Math.floor(t*CFG.fastHz);
+    // 慢乱码：画在一张常驻的底图上，每帧只重画换了字的格子
+    sctx.font = CFG.font; sctx.textBaseline = 'top'; sctx.fillStyle = col.slow;
+    for(let o=0; o<n; o++){
+      const x = x0 + (o % cols)*cw, y = y0 + ((o/cols) | 0)*chh;
+      const k = (!mask[o] && h[o] <= th[o] - CFG.band) ? Math.floor(t*CFG.slowHz + ph[o]) : -1;
+      if(k === slowK[o]) continue;
+      sctx.clearRect(x, y, cw, chh);
+      if(k >= 0) sctx.fillText(CH[hash(o, k) % CH.length], x, y + 1);
+      slowK[o] = k;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.globalAlpha = CFG.dimAlpha; ctx.drawImage(slowCv, 0, 0); ctx.globalAlpha = 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = CFG.font; ctx.textBaseline = 'top';
+    ctx.fillStyle = col.fast; ctx.globalAlpha = 0.6;                       // 接近阈值：快速跳动的粉色乱码
+    for(let o=0; o<n; o++){
+      if(mask[o] || h[o] <= th[o] - CFG.band) continue;
+      const shown = h[o] > th[o] && real[o] !== CONT;
+      const lead = real[o] === CONT && h[o - 1] > th[o - 1];
+      if(shown || lead) continue;
+      ctx.fillText(CH[hash(o, fastK) % CH.length], x0 + (o % cols)*cw, y0 + ((o/cols) | 0)*chh + 1);
+    }
+    ctx.fillStyle = col.real;                                              // 超过阈值：真实的故事小字
+    for(let o=0; o<n; o++){
+      if(mask[o] || h[o] <= th[o] || real[o] === ' ' || real[o] === CONT || real[o] === '　') continue;
+      ctx.globalAlpha = Math.min(1, 0.5 + (h[o] - th[o])*1.5);
+      ctx.fillText(real[o], x0 + (o % cols)*cw, y0 + ((o/cols) | 0)*chh + 1);
+    }
+    ctx.globalAlpha = 1;
+    // 鱿鱼：嵌在同一层格子里，不受乱码影响
+    SQG[sqFrame].forEach((line, r) => line.forEach(([c, k], i) => {
+      if(c === ' ') return; ctx.fillStyle = col[k];
+      ctx.fillText(c, x0 + (sqC0 + i)*cw, y0 + (sqR0 + r)*chh + 1);
+    }));
+  }
+  function frame(ts){
+    if(!running) return;
+    requestAnimationFrame(frame);
+    if(document.hidden){ last = ts; return; }
+    if(ts - last < 1000/CFG.fps - 1) return;
+    const dt = Math.min(0.06, (ts - last)/1000 || 0.016); last = ts;
+    if(!reduced()) step(dt);
+    draw();
+  }
+  splash.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); pointer = {x: e.clientX - r.left, y: e.clientY - r.top, at: performance.now()}; });
+  splash.addEventListener('pointerleave', () => { pointer = null; });
+  // 开场框的大小一变（字体加载、提示行出现），鱿鱼占位框就会挪，格子要跟着重新对齐
+  if(window.ResizeObserver) new ResizeObserver(() => { if(running) build(); }).observe(splash.querySelector('.box'));
+  addEventListener('resize', () => { if(running) build(); });
+  return {
+    start(){ readColors(); if(!build()) return; running = true; requestAnimationFrame(frame); if(document.fonts) document.fonts.ready.then(() => running && build()); },
+    stop(){ running = false; },
+  };
+})();
+
 S.play(false);       // 开场时先别打，开场结束再开始
 function runSplash(){
+  Glyphs.start();
   const dur = reduced() ? 200 : 1800, t0 = performance.now(); let f = 0, want = '';
   const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
   const tick = () => {
     const p = Math.min(1, (performance.now() - t0)/dur), n = Math.round(p*20);
-    sq.innerHTML = SQ[f++ % 3].join('\n');
+    sqFrame = f++ % 3;
     const st = STEPS[Math.min(3, Math.floor(p*4))];
     if(st !== want){ want = st; reveal(loadStep, st, {from: loadStep.textContent || blank(st), dur: 300, band: .5, force: true}); }
     loadBar.innerHTML = `  [<b>${'#'.repeat(n)}</b>${'.'.repeat(20 - n)}] ${String(Math.round(p*100)).padStart(3)}%`;
@@ -499,7 +671,7 @@ function runSplash(){
 function waitStart(){
   const go = $('#go'), msg = '> 按任意处开始 <';
   let f = 0, alive = true;
-  const bob = () => { if(!alive) return; sq.innerHTML = SQ[f++ % 3].join('\n'); setTimeout(bob, 170); };
+  const bob = () => { if(!alive) return; sqFrame = f++ % 3; setTimeout(bob, 170); };
   bob();
   reveal(loadStep, '准备好了', {from: loadStep.textContent, dur: 300, band: .5, force: true});
   go.hidden = false; reveal(go, msg, {from: blank(msg), dur: 500, force: true});
@@ -517,7 +689,7 @@ function waitStart(){
 }
 function done(){
   splash.classList.add('bye');
-  setTimeout(() => { splash.hidden = true; }, 650);
+  setTimeout(() => { splash.hidden = true; Glyphs.stop(); }, 650);
   reveal($('#logoT'), 'Squiddle', {from: '########', dur: 700, force: true});
   reveal(camT, S.camera(), {from: blank(S.camera()), dur: 600, delay: 200, force: true});
   showSong(S.song(), true);
