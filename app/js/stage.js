@@ -100,20 +100,32 @@ const post = new THREE.ShaderMaterial({
       float tw = .75 + .25*sin(uT*(1.3 + 2.*fract(hs*13.1)) + hs*40.);      // 轻轻闪
       return mix(base, vec3(.95, .94, 1.), (.3 + .45*fract(hs*97.))*tw);
     }
-    // 一圈山：圆柱面上按角度排 n 座尖峰，两边坡度不一样（有的往一边斜），坡面往里凹，峰顶就尖；再加一点逐格的碎齿
-    float ridge(float a, float R, float seed, float n, float hmax, float base){
-      float h = base*(1. + .5*sin(a*3. + seed) + .3*sin(a*7. - seed*2.));
-      for(int k = 0; k < 16; k++){
+    // 一圈山：沿圆柱的角度取一维分形噪声当连绵的矮山脊（在圆上采样，绕一圈首尾接得上），上面立几簇细高的石峰，
+    // 像雾里的峰林：每簇三四根石柱，中间高两边矮；柱子上窄下略宽、顶上圆钝，侧壁随高度左右错开，像一层层岩块
+    float vn2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+      return mix(mix(hash(i), hash(i + vec2(1., 0.)), f.x), mix(hash(i + vec2(0., 1.)), hash(i + 1.), f.x), f.y); }
+    float fbm2(vec2 p){ return .5*vn2(p) + .25*vn2(p*2.03 + 7.1) + .125*vn2(p*4.11 + 3.3) + .0625*vn2(p*8.17 + 1.9); }
+    float ridge(float a, float v, float R, float seed, float n, float hmax, float base){
+      vec2 cp = vec2(cos(a), sin(a))*R;
+      float h = base*(.35 + 1.1*fbm2(cp*.08 + seed));
+      for(int k = 0; k < 10; k++){
         float fk = float(k); if(fk >= n) break;
         float c = (fk + .15 + .7*h1(fk + seed))/n*TAU;
         float d = a - c; d = (d - TAU*floor((d + 3.14159265)/TAU))*R;
-        float hk = hmax*(.3 + .7*h1(fk*3.1 + seed)), wl = hk*(.45 + 1.1*h1(fk*5.7 + seed)), wr = hk*(.45 + 1.1*h1(fk*7.3 + seed));
-        float t = d < 0. ? -d/wl : d/wr;
-        h = max(h, hk*pow(max(0., 1. - t), 2.3));                                   // 坡面往里凹得更狠：细长的尖峰
-        h = max(h, hk*.55*pow(max(0., 1. - abs(d - (d < 0. ? -.45 : .5)*wl)/(.35*wl)), 2.));   // 主峰旁边的小副峰
+        float spread = 1.6 + 2.2*h1(fk*2.3 + seed);
+        if(abs(d) > spread + 2.) continue;
+        float hc = hmax*(.45 + .55*h1(fk*3.1 + seed));
+        for(int j = 0; j < 4; j++){
+          float fj = float(j), r1 = h1(fk*11.7 + fj*3.9 + seed), r2 = h1(fk*5.3 + fj*7.1 + seed*1.7);
+          float o = (fj - 1.5 + (r1 - .5)*.8)/1.5*spread;
+          float hj = hc*(.5 + .5*r2)*(1. - .45*abs(o)/spread);
+          float w = .3 + .45*h1(fk*9.1 + fj*2.7 + seed);
+          float dj = d - o + (vn2(vec2(v*1.6, fk*13. + fj*5.)) - .5)*w*.7;             // 侧壁一层层错开
+          float t = abs(dj)/(w*(1. + .5*max(0., 1. - v/hj)));                             // 底部略宽
+          if(t < 1.) h = max(h, hj*(1. - t*t*t*t));                                      // 顶上圆钝、侧壁陡
+        }
       }
-      // 碎齿：越高的地方石头越碎，剪影边缘一格一格地崩
-      return h + (h1(floor(a*R*2.5) + seed) - .5)*.22 + (h1(floor(a*R*.9) + seed*1.7) - .5)*.9*smoothstep(1., hmax, h);
+      return h;
     }
     // 城堡剪影（u 是沿山圈的横向距离、v 是离地高度，单位和场景一样）：0 = 没有，1 = 墙体，2 = 亮着的窗
     float bx(vec2 q, float cx, float hw, float y0, float y1){ return step(abs(q.x - cx), hw)*step(y0, q.y)*step(q.y, y1); }
@@ -146,14 +158,15 @@ const post = new THREE.ShaderMaterial({
       return (-b + sqrt(max(b*b - a*c, 0.)))/a;
     }
     vec3 horizon(vec3 ro, vec3 rd, float dist, vec3 cs, float bay){
-      vec3 farC = night*vec3(.6, .6, .7), nearC = night*vec3(.36, .36, .46), win = vec3(1., .8, .45);
+      // 颜色只比夜空暗一点点：远的一圈几乎融进天里，近的一圈也只是隐约看得出；山脚是一层比夜空亮一点的薄雾
+      vec3 farC = night*vec3(.97, .93, .98), nearC = night*vec3(.91, .84, .92), haze = night*vec3(1.12, 1.12, 1.1), win = vec3(1., .8, .45);
       for(int L = 0; L < 2; L++){
         float R = L == 0 ? 46. : 30.;
         float t = cylT(ro, rd, R);
         if(t < 0. || t > dist) continue;
         vec3 hp = ro + rd*t; float a = atan(hp.x - .1, hp.z + .4), v = hp.y - floorY;
         if(v < -.05) continue;
-        float h = L == 0 ? ridge(a, R, 11.3, 16., 5.2, 1.2) : ridge(a, R, 4.7, 11., 8.5, .5);
+        float h = L == 0 ? ridge(a, v, R, 11.3, 9., 5.5, 1.3) : ridge(a, v, R, 4.7, 7., 7.5, .8);
         vec3 col = L == 0 ? farC : nearC;
         float k = 0.;
         if(L == 1){                                                 // 城堡在默认视角的正后方偏右，周围的山让开一点
@@ -161,9 +174,9 @@ const post = new THREE.ShaderMaterial({
           h = mix(min(h, .9), h, smoothstep(4., 8., abs(u)));
         }
         if(v < h || k > .5){
-          vec3 m = k > 1.5 ? mix(nearC, win, .8) : col;
-          float mist = (1. - smoothstep(0., L == 0 ? 2.4 : 1.6, v))*.6;     // 山脚埋在薄雾里：越往下越接近夜空色
-          cs = mix(m, night, float(mist > bay)*(k > 1.5 ? 0. : 1.));
+          vec3 m = k > 1.5 ? mix(nearC, win, .45) : k > .5 ? night*vec3(.78, .78, .85) : col;
+          float mist = (1. - smoothstep(0., L == 0 ? 3. : 2.2, v))*.85;     // 山脚埋在薄雾里，用抖动分四档，像素风不出色带
+          cs = k > 1.5 ? m : mix(m, haze, floor(mist*4. + bay)/4.);
         }
       }
       return cs;
@@ -968,6 +981,21 @@ const capeClasp = new THREE.Group(); capeClasp.scale.setScalar(1.3); scene.add(c
 { // 领口金边跟着身体
   const collar = new THREE.Mesh(new THREE.TorusGeometry(CAPE_RC + 0.004, 0.024, 6, 36), hoopMat);
   collar.rotation.x = Math.PI/2; collar.position.y = CAPE_YC + 0.004; body.add(collar);
+  // 小高领：从领口往上立起一圈星空料子，往外微微翻开，正前方留一道 V 形开口；上沿和开口两边镶金边
+  const HG = 0.42, HC = 0.13, HR0 = CAPE_RC + 0.012, HR1 = CAPE_RC + 0.05, HN = 28, hv = [], huv = [], hix = [];
+  for(let j=0; j<=2; j++) for(let i=0; i<=HN; i++){
+    const v = j/2, g = HG*(1 - 0.45*v), a = g + (2*Math.PI - 2*g)*i/HN, r = HR0 + (HR1 - HR0)*v*v;   // 越往上开口越大、越往外翻
+    hv.push(Math.cos(a)*r, CAPE_YC + HC*v, Math.sin(a)*r); huv.push(a/(2*Math.PI), 0.62 + 0.22*v);
+  }
+  for(let j=0; j<2; j++) for(let i=0; i<HN; i++){ const a = j*(HN + 1) + i, b = a + 1, c = a + HN + 1, d = c + 1; hix.push(a, c, b, b, c, d); }
+  const hg = new THREE.BufferGeometry();
+  hg.setAttribute('position', new THREE.Float32BufferAttribute(hv, 3)); hg.setAttribute('uv', new THREE.Float32BufferAttribute(huv, 2)); hg.setIndex(hix); hg.computeVertexNormals();
+  body.add(new THREE.Mesh(hg, toon(0xffffff, {map:capeTex, side:THREE.FrontSide})), new THREE.Mesh(hg, capeLining));
+  const edge = (pts)=>{ const c = new THREE.CatmullRomCurve3(pts.map(p=>new V3(...p))); body.add(new THREE.Mesh(new THREE.TubeGeometry(c, pts.length*4, 0.011, 5, false), hoopMat)); };
+  const top = [], gT = HG*0.55;
+  for(let i=0; i<=HN; i++){ const a = gT + (2*Math.PI - 2*gT)*i/HN; top.push([Math.cos(a)*(HR1 + 0.004), CAPE_YC + HC, Math.sin(a)*(HR1 + 0.004)]); }
+  edge(top);
+  for(const sgn of [1, -1]) edge([0, 0.5, 1].map(v=>{ const g = sgn*HG*(1 - 0.45*v), r = HR0 + (HR1 - HR0)*v*v + 0.004; return [Math.cos(g)*r, CAPE_YC + HC*v, Math.sin(g)*r]; }));
   capeClasp.add(new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.016, 4, 4), hoopMat));                 // 菱形金托
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.058, 0), toon(0x9a63f2)); gem.scale.set(0.82, 1, 0.5); capeClasp.add(gem);   // 八面体自带分面法线，本来就是切面宝石；卡通材质不认 flatShading，写了只会在控制台报警告
 }

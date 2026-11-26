@@ -243,15 +243,19 @@ kbd{font-family:var(--f);font-size:12px;color:var(--mist);padding:0 4px;border:1
 @property --cell{syntax:'<length>';inherits:true;initial-value:2px}
 #seekBar{height:20px;--h:2px;--pitch:3px;--cell:2px;transition:--h .22s var(--out),--pitch .22s var(--out),--cell .22s var(--out)}
 #seekBar:hover,#seekBar:has(input:focus-visible){--h:10px;--pitch:7px;--cell:5px}
-#seekBar.drag{--h:18px;--pitch:10px;--cell:8px;transition:--h .3s var(--spring),--pitch .3s var(--spring),--cell .3s var(--spring)}
+/* 拖动时：格子换成画布来画，只有把手附近的几格像程序坞那样鼓起来 */
+#seekBar.drag{--h:10px;--pitch:7px;--cell:5px}
+#seekBar .mag{position:absolute;left:0;top:-4px;width:100%;height:28px;pointer-events:none;opacity:0;image-rendering:pixelated}
+#seekBar.mag-on .cells,#seekBar.mag-on .fill{opacity:0}
+#seekBar.mag-on .mag{opacity:1}
 #seekBar .cells,#seekBar .fill{top:calc(50% - var(--h)/2);bottom:auto;height:var(--h)}
 #seekBar .cells{background:var(--panel2)}
 #seekBar:hover .cells,#seekBar.drag .cells{background:var(--raise)}
 #seekBar .glow{width:20px;height:16px;transition:width .3s var(--spring),height .3s var(--spring)}
 #seekBar:hover .glow{width:34px;height:28px}
-#seekBar.drag .glow{width:52px;height:44px}
+#seekBar.drag .glow{width:46px;height:38px}
 #seekBar .knob{height:16px}
-#seekBar.drag .knob{width:10px;height:28px;opacity:1;transform:translate(-50%,-50%)}
+#seekBar.drag .knob{height:26px;opacity:1;transform:translate(-50%,-50%)}
 #seekBar input{top:0;bottom:0}
 
 /* 全窗口粒子层 */

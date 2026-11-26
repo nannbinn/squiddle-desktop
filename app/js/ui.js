@@ -103,7 +103,7 @@ S.on('song', info => showSong(info));
 function setBar(bar, p){
   p = Math.max(0, Math.min(1, p));
   // 格子宽度跟着状态走：主进度条平时是 3px 一格的细粒子线，悬停 7px，拖动 10px
-  const W = bar.clientWidth, pitch = bar.id !== 'seekBar' ? 7 : bar.classList.contains('drag') ? 10 : bar.matches(':hover') ? 7 : 3;
+  const W = bar.clientWidth, pitch = bar.id !== 'seekBar' || bar.classList.contains('drag') || bar.matches(':hover') ? 7 : 3;
   const fw = Math.min(W, Math.round(p*W/pitch)*pitch);
   bar.querySelector('.fill').style.width = fw + 'px';
   bar.querySelector('.knob').style.left = (p*W) + 'px';
@@ -422,6 +422,29 @@ function laneSpark(key, vel){
   const L = S.lane(), y0 = L.row[key]; if(y0 === undefined || reduced()) return;
   const B = rel(laneCv), k = B.h/L.lh, x = B.x + (L.phx + .5)*k, y = B.y + y0*k, c = hex(L.col[key]);
   for(let i=0; i<3 + Math.round(vel*4); i++) emitFx({x, y, vx: -(20 + Math.random()*70), vy: (Math.random() - .5)*40, drag: 2.2, dec: 1.1 + Math.random()*.9, c, tw: true});
+}
+/* 拖进度条时的"程序坞放大"：照常是 7px 一格的像素条，把手两边的格子按离把手的距离鼓起来（高斯），越近越高越宽，松手后慢慢收回 */
+const magCv = seekBar.querySelector('.mag'), magCtx = magCv.getContext('2d');
+let magK = 0;
+const lerpC = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v)*t));
+const C_PLUM = [147, 64, 127], C_PINK = [240, 131, 165], C_WHITE = [255, 255, 255], C_OFF = [67, 69, 111];
+function drawMag(dt){
+  const on = seekBar.classList.contains('drag');
+  magK += ((on ? 1 : 0) - magK)*(1 - Math.exp(-dt*(on ? 16 : 10)));
+  if(magK < .01){ if(seekBar.classList.contains('mag-on')) seekBar.classList.remove('mag-on'); magK = 0; return; }
+  seekBar.classList.add('mag-on');
+  const dpr = Math.max(1, Math.round(devicePixelRatio || 1)), W = seekBar.clientWidth, H = 28;
+  if(magCv.width !== W*dpr || magCv.height !== H*dpr){ magCv.width = W*dpr; magCv.height = H*dpr; }
+  const c = magCtx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const kx = parseFloat(seekBar.querySelector('.knob').style.left) || 0, fw = parseFloat(seekBar.querySelector('.fill').style.width) || 0;
+  for(let x = 0; x < W; x += 7){
+    const d = (x + 2.5 - kx)/30, g = Math.exp(-d*d)*magK;
+    const w = 5 + Math.round(g*1.5), h = Math.round(10 + g*16), y = Math.round((H - h)/2);
+    let col;
+    if(x < fw){ const t = x/Math.max(1, fw); col = t < .72 ? lerpC(C_PLUM, C_PINK, t/.72) : lerpC(C_PINK, C_WHITE, (t - .72)/.28); }
+    else col = C_OFF;
+    c.fillStyle = `rgb(${col})`; c.fillRect(x - (w - 5)/2, y, w, h);
+  }
 }
 function seekEmber(dt){
   if(!S.state().playing || scrub || Math.random() > dt*14) return;
@@ -829,7 +852,7 @@ function frame(now){
     for(let k=0; k<24; k++){ const val = fpsHist[k - off]; bars[k].style.height = val ? Math.max(2, Math.round(val/mx*8)*2) + 'px' : '0px'; }
   }
   if(isOpen() && curTab === 'tab-hit'){ drawSpec(now/1000, dt); drawHead(now/1000); }
-  seekEmber(dt); dropDust(dt); drawFx(dt, now/1000);
+  seekEmber(dt); drawMag(dt); dropDust(dt); drawFx(dt, now/1000);
   slow += dt;
   if(slow > 1/30){
     slow = 0; drawMeter();
