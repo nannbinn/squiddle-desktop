@@ -21,12 +21,12 @@ const camera = new THREE.PerspectiveCamera(38, W/H, 0.3, 60);
 const post = new THREE.ShaderMaterial({
   uniforms:{tColor:{value:rt.texture}, tDepth:{value:rt.depthTexture}, px:{value:new THREE.Vector2(1/W,1/H)}, near:{value:camera.near}, far:{value:camera.far}, fogFar:{value:20}, ink:{value:new THREE.Color(0x1a1230)}, inkJ:{value:new THREE.Color(0x8a1f55)},
     projInv:{value:new THREE.Matrix4()}, camWorld:{value:new THREE.Matrix4()}, mantleInv:{value:new THREE.Matrix4()}, mantleH:{value:1.75},
-    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x22244c)}, beamC:{value:new THREE.Color(0xfff3c4)}},
+    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x22244c)}, beamC:{value:new THREE.Color(0xfff3c4)}, pxA:{value:0.0037}, uT:{value:0}},
   vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
   fragmentShader:`
     uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 px; uniform float near; uniform float far; uniform float fogFar; uniform vec3 ink; uniform vec3 inkJ;
     uniform mat4 projInv; uniform mat4 camWorld; uniform mat4 mantleInv; uniform float mantleH;
-    uniform float uSpot; uniform vec3 spotA; uniform vec3 spotAx; uniform float spotTan; uniform float spotL; uniform float floorY; uniform vec3 night; uniform vec3 beamC;
+    uniform float uSpot; uniform vec3 spotA; uniform vec3 spotAx; uniform float spotTan; uniform float spotL; uniform float floorY; uniform vec3 night; uniform vec3 beamC; uniform float pxA; uniform float uT;
     varying vec2 vUv;
     float lin(vec2 uv){ float z=texture2D(tDepth,uv).x*2.-1.; return 2.*near*far/(far+near-z*(far-near)); }
     float thr(float d){ return 0.09*d + 0.04; }
@@ -85,6 +85,102 @@ const post = new THREE.ShaderMaterial({
       }
       return acc/14.*(s1 - s0);
     }
+    // ---- 聚光灯夜景的远景：钉在世界里的像素星、两圈岩石山峰剪影、一座城堡 ----
+    const float TAU = 6.2831853;
+    float h1(float n){ return fract(sin(n*127.1 + 3.7)*43758.5453); }
+    // 星星按视线方向分格，每格最多一颗，只点亮离它最近的那一个像素：转视角时星星跟着天空一起转，还是一格一颗
+    vec3 starAt(vec3 rd, vec3 base){
+      float yaw = atan(rd.x, rd.z), pit = asin(clamp(rd.y, -1., 1.)), cs = .011;
+      float iy = floor(pit/cs), pc = (iy + .5)*cs, cw = cs/max(cos(pc), .2);
+      float ix = floor(yaw/cw), hs = hash(vec2(ix, iy) + 17.3);
+      if(hs < .962) return base;
+      vec2 st = vec2((ix + .2 + .6*fract(hs*31.7))*cw, (iy + .2 + .6*fract(hs*57.3))*cs);
+      vec2 dd = vec2((yaw - st.x)*cos(pit), pit - st.y);
+      if(max(abs(dd.x), abs(dd.y)) > pxA*.5) return base;
+      float tw = .75 + .25*sin(uT*(1.3 + 2.*fract(hs*13.1)) + hs*40.);      // 轻轻闪
+      return mix(base, vec3(.95, .94, 1.), (.3 + .45*fract(hs*97.))*tw);
+    }
+    // 一圈山：沿圆柱的角度取一维分形噪声当连绵的矮山脊（在圆上采样，绕一圈首尾接得上），上面立几簇细高的石峰，
+    // 像雾里的峰林：每簇三四根石柱，中间高两边矮；柱子上窄下略宽、顶上圆钝，侧壁随高度左右错开，像一层层岩块
+    float vn2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+      return mix(mix(hash(i), hash(i + vec2(1., 0.)), f.x), mix(hash(i + vec2(0., 1.)), hash(i + 1.), f.x), f.y); }
+    float fbm2(vec2 p){ return .5*vn2(p) + .25*vn2(p*2.03 + 7.1) + .125*vn2(p*4.11 + 3.3) + .0625*vn2(p*8.17 + 1.9); }
+    float ridge(float a, float v, float R, float seed, float n, float hmax, float base){
+      vec2 cp = vec2(cos(a), sin(a))*R;
+      float h = base*(.35 + 1.1*fbm2(cp*.08 + seed));
+      for(int k = 0; k < 10; k++){
+        float fk = float(k); if(fk >= n) break;
+        float c = (fk + .15 + .7*h1(fk + seed))/n*TAU;
+        float d = a - c; d = (d - TAU*floor((d + 3.14159265)/TAU))*R;
+        float spread = 1.6 + 2.2*h1(fk*2.3 + seed);
+        if(abs(d) > spread + 2.) continue;
+        float hc = hmax*(.45 + .55*h1(fk*3.1 + seed));
+        for(int j = 0; j < 4; j++){
+          float fj = float(j), r1 = h1(fk*11.7 + fj*3.9 + seed), r2 = h1(fk*5.3 + fj*7.1 + seed*1.7);
+          float o = (fj - 1.5 + (r1 - .5)*.8)/1.5*spread;
+          float hj = hc*(.5 + .5*r2)*(1. - .45*abs(o)/spread);
+          float w = .3 + .45*h1(fk*9.1 + fj*2.7 + seed);
+          float dj = d - o + (vn2(vec2(v*1.6, fk*13. + fj*5.)) - .5)*w*.7;             // 侧壁一层层错开
+          float t = abs(dj)/(w*(1. + .5*max(0., 1. - v/hj)));                             // 底部略宽
+          if(t < 1.) h = max(h, hj*(1. - t*t*t*t));                                      // 顶上圆钝、侧壁陡
+        }
+      }
+      return h;
+    }
+    // 城堡剪影（u 是沿山圈的横向距离、v 是离地高度，单位和场景一样）：0 = 没有，1 = 墙体，2 = 亮着的窗
+    float bx(vec2 q, float cx, float hw, float y0, float y1){ return step(abs(q.x - cx), hw)*step(y0, q.y)*step(q.y, y1); }
+    float sp(vec2 q, float cx, float hw, float y0, float y1){ float t = (q.y - y0)/(y1 - y0); return step(0., t)*step(t, 1.)*step(abs(q.x - cx), hw*(1. - t)); }
+    float castle(vec2 q){
+      if(abs(q.x) > 3.6 || q.y > 6.6 || q.y < -.5) return 0.;
+      float w = 0.;
+      w = max(w, bx(q, 0., 3.4, -1., .55 + .22*step(.5, fract(q.x*1.6))));             // 山脚下的小镇，屋顶高低错落
+      w = max(w, bx(q, -2.2, .7, -1., 1.05)); w = max(w, sp(q, -2.2, .75, 1.05, 1.5));
+      w = max(w, bx(q, .2, 1.45, -1., 2.2)); w = max(w, sp(q, .2, 1.45, 2.2, 2.75));      // 主殿和人字顶
+      w = max(w, bx(q, .55, .4, -1., 4.3)); w = max(w, sp(q, .55, .42, 4.3, 6.5));        // 主塔和尖顶
+      w = max(w, bx(q, -.5, .32, -1., 3.7)); w = max(w, sp(q, -.5, .34, 3.7, 5.5));       // 副塔
+      w = max(w, bx(q, 1.3, .15, -1., 2.9)); w = max(w, sp(q, 1.3, .17, 2.9, 3.65));      // 小尖塔
+      w = max(w, bx(q, -1.25, .17, -1., 2.6)); w = max(w, sp(q, -1.25, .19, 2.6, 3.35));
+      w = max(w, bx(q, 1.75, .11, -1., 2.35)); w = max(w, sp(q, 1.75, .13, 2.35, 2.9));
+      w = max(w, bx(q, -1.85, .11, -1., 2.95));                                            // 烟囱
+      w = max(w, bx(q, 2.65, .36, 1.1, 1.85)); w = max(w, sp(q, 2.65, .42, 1.85, 2.3));   // 右边的水塔
+      w = max(w, step(abs(abs(q.x - 2.65) - .27), .06)*step(q.y, 1.1));
+      if(w < .5) return 0.;
+      float win = bx(q, .95, .2, .75, 1.55)                                                 // 主殿的拱门透着光
+        + bx(q, .55, .07, 3.25, 3.55) + bx(q, .55, .07, 2.55, 2.8) + bx(q, -.5, .06, 2.9, 3.15)
+        + bx(q, -.75, .07, 1.3, 1.5) + bx(q, -.2, .07, 1.3, 1.5) + bx(q, -2.35, .07, .55, .75) + bx(q, 1.6, .07, .25, .42);
+      return win > .5 ? 2. : 1.;
+    }
+    // 视线打到以舞台为中心、半径 R 的竖直圆柱上的位置（相机总在圆柱里面，取往前那个交点）
+    float cylT(vec3 ro, vec3 rd, float R){
+      vec2 o = ro.xz - vec2(.1, -.4), d = rd.xz;
+      float a = dot(d, d), b = dot(o, d), c = dot(o, o) - R*R;
+      if(a < 1e-5) return -1.;
+      return (-b + sqrt(max(b*b - a*c, 0.)))/a;
+    }
+    vec3 horizon(vec3 ro, vec3 rd, float dist, vec3 cs, float bay){
+      // 颜色只比夜空暗一点点：远的一圈几乎融进天里，近的一圈也只是隐约看得出；山脚是一层比夜空亮一点的薄雾
+      vec3 farC = night*vec3(.97, .93, .98), nearC = night*vec3(.91, .84, .92), haze = night*vec3(1.12, 1.12, 1.1), win = vec3(1., .8, .45);
+      for(int L = 0; L < 2; L++){
+        float R = L == 0 ? 46. : 30.;
+        float t = cylT(ro, rd, R);
+        if(t < 0. || t > dist) continue;
+        vec3 hp = ro + rd*t; float a = atan(hp.x - .1, hp.z + .4), v = hp.y - floorY;
+        if(v < -.05) continue;
+        float h = L == 0 ? ridge(a, v, R, 11.3, 9., 5.5, 1.3) : ridge(a, v, R, 4.7, 7., 7.5, .8);
+        vec3 col = L == 0 ? farC : nearC;
+        float k = 0.;
+        if(L == 1){                                                 // 城堡在默认视角的正后方偏右，周围的山让开一点
+          float u = a - 4.42; u = (u - TAU*floor((u + 3.14159265)/TAU))*R; k = castle(vec2(u, v));
+          h = mix(min(h, .9), h, smoothstep(4., 8., abs(u)));
+        }
+        if(v < h || k > .5){
+          vec3 m = k > 1.5 ? mix(nearC, win, .45) : k > .5 ? night*vec3(.78, .78, .85) : col;
+          float mist = (1. - smoothstep(0., L == 0 ? 3. : 2.2, v))*.85;     // 山脚埋在薄雾里，用抖动分四档，像素风不出色带
+          cs = k > 1.5 ? m : mix(m, haze, floor(mist*4. + bay)/4.);
+        }
+      }
+      return cs;
+    }
     void main(){
       vec4 c4 = texture2D(tColor,vUv);
       vec3 c = c4.rgb;
@@ -117,8 +213,7 @@ const post = new THREE.ShaderMaterial({
         vec3 cs;
         if(emis) cs = c;
         else if(bg){
-          float hs = hash(floor(gl_FragCoord.xy));
-          cs = hs > 0.9965 ? mix(night, vec3(.95, .94, 1.), .3 + .45*fract(hs*97.)) : night;
+          cs = horizon(ro, rd, 1e4, starAt(rd, night), bay);
         } else {
           vec2 k = coneR(wp);
           float lit = k.y > 0. ? 1. - smoothstep(.88, 1.02, k.x) : 0.;
@@ -127,6 +222,7 @@ const post = new THREE.ShaderMaterial({
           vec3 on = c*vec3(1.03, 1., .93);
           if(flr) on = mix(night, on, .5 - .14*k.x*k.x);           // 地板上的光斑压暗一半，往边上再淡一点；鼓手和鼓照常亮
           cs = mix(mix(night, c, flr ? .04 : .09), on, lit);       // 光圈外：地面几乎和页面一样，东西留一点点轮廓
+          if(flr && lit < .01) cs = horizon(ro, rd, length(wp - ro), cs, bay);   // 远处地面上也能立起山脚
         }
         float g = 1. - exp(-beam(ro, rd, bg ? 40. : length(wp - ro))*.38);
         g = smoothstep(.03, .62, g);                               // 提一点对比，光柱的边更利落
@@ -308,7 +404,7 @@ function skinMat(o){
 }
 // 金属：分档光照 + 假环境反射（天空亮、地平线一道暗带）+ 硬边高光；镲片的切线沿圆周（车纹），高光会拉成放射状亮带
 function metalMat(o){
-  return new THREE.ShaderMaterial({
+  const m = new THREE.ShaderMaterial({
     uniforms:{ base:{value:new THREE.Color(o.base)}, hi:{value:new THREE.Color(o.hi)}, lo:{value:new THREE.Color(o.lo)}, Lw:{value:SUN_DIR},
       aniso:{value:o.aniso ? 1 : 0}, grooves:{value:o.grooves || 0} },
     side: o.side || THREE.FrontSide,
@@ -348,6 +444,8 @@ function metalMat(o){
         gl_FragColor = vec4(col, 1.0);
       }`
   });
+  m.userData.mergeable = !o.aniso;     // 只用世界坐标算光照，可以合并（镲片车纹用局部坐标，不合并）
+  return m;
 }
 // ---------- 果冻材质 ----------
 // 半透明外壳：中间薄、边缘厚（菲涅尔），越靠轮廓越亮越饱和；背光一侧的轮廓里透出亮色；顶上一片柔和高光。
@@ -425,7 +523,7 @@ function jellyMat(o){
 }
 // 果冻里的器官：不透明，被外壳染色。轮廓一圈略暗，正面有一点亮，看着像浮在里面的软球
 function organMat(color, gloss){
-  return new THREE.ShaderMaterial({
+  const m = new THREE.ShaderMaterial({
     uniforms:{c:{value:new THREE.Color(color)}, Lw:{value:SUN_DIR}, gloss:{value:gloss||0}},
     vertexShader:`varying vec3 vWN; varying vec3 vWP;
       void main(){ vec4 wp = modelMatrix*vec4(position,1.0); vWP = wp.xyz; vWN = normalize(mat3(modelMatrix)*normal); gl_Position = projectionMatrix*viewMatrix*wp; }`,
@@ -440,6 +538,8 @@ function organMat(color, gloss){
         gl_FragColor = vec4(col, 1.0);
       }`
   });
+  m.userData.mergeable = true;
+  return m;
 }
 // 连续软管：沿一串点扫出椭圆截面的管子，顶点和法线每帧直接算。
 // 以前触手是一串小球拼的，每个球各自打光、各自描边，看起来一节一节；换成一整根管子就连贯了
@@ -820,18 +920,24 @@ const hoopMat = metalMat({base:0xe2ad3e, hi:0xfff6d2, lo:0x6f4e17});            
 // ---------- 星空披肩（代替原来的蓝围巾） ----------
 // 深靛蓝星空料子，和鼓壳同一路；小丑式尖角下摆镶一道金边，每个尖上挂一颗小金铃；领口一圈金边，正面一颗紫宝石扣；背后用金线绣北斗七星。
 // 布在世界空间里模拟：领口一圈钉在身上，其余各点有惯性和重力，再被弹簧拉回设计好的形状；碰到头和触手根会被推开
-const CAPE_NC = 48, CAPE_NR = 6, CAPE_NP = 8, CAPE_YC = RING_Y + 0.17, CAPE_RC = 0.255, CAPE_RH = 0.48, CAPE_L = 0.24;
+// 加长版：搭过肩以后往下垂成六片 V 形长襟，正前方两片中间开口，每个尖上挂一个金流苏
+const CAPE_NC = 48, CAPE_NR = 10, CAPE_NP = 6, CAPE_YC = RING_Y + 0.17, CAPE_RC = 0.255, CAPE_RH = 0.48, CAPE_L = 0.42;
 const capeTri = i => { const f = (i/CAPE_NC*CAPE_NP) % 1; return 1 - Math.abs(f*2 - 1); };   // 两个尖之间是 0，尖上是 1；正前方是凹口
-const capeTex = pixTex(256, 48, (g, w, h)=>{
+const capeTex = pixTex(256, 96, (g, w, h)=>{
   const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#272a78'); gr.addColorStop(1, '#3d42a8');
   g.fillStyle = gr; g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(176,164,255,0.3)';                                    // 一道淡淡的银河
   for(let x=0; x<w; x++){ const y = Math.round(h*0.64 + 5*Math.sin(x/w*Math.PI*6)); g.fillRect(x, y - 2, 1, 4); }
   let r = 9; const rnd = ()=>((r = (r*16807) % 2147483647) - 1)/2147483646;
-  for(let i=0; i<90; i++){ g.fillStyle = rnd() < 0.75 ? '#ffffff' : '#fff1a6'; g.fillRect(Math.floor(rnd()*w), Math.floor(rnd()*h), 1, 1); }
+  for(let i=0; i<170; i++){ g.fillStyle = rnd() < 0.75 ? '#ffffff' : '#fff1a6'; g.fillRect(Math.floor(rnd()*w), Math.floor(rnd()*h), 1, 1); }
+  for(let i=0; i<14; i++){                                                // 散落的金色四芒星，越往下摆越大
+    const x = 3 + Math.floor(rnd()*(w - 6)), y = Math.floor(h*0.42 + rnd()*h*0.5), a = y > h*0.7 ? 3 : 2;
+    if(Math.abs(x - w*0.5) < w*0.16 && y < h*0.45) continue;
+    g.fillStyle = '#e9b949'; g.fillRect(x - a, y, 2*a + 1, 1); g.fillRect(x, y - a - 1, 1, 2*a + 3); g.fillStyle = '#fff4c8'; g.fillRect(x, y, 1, 1);
+  }
   // 北斗七星：斗口四颗 + 斗柄三颗，绣在背后正中（u = 0.5）
   const D = [[0, 0.04], [0.03, 0.6], [0.3, 0.72], [0.34, 0.22], [0.55, 0.12], [0.76, 0.2], [1, 0.52]];
-  const S = D.map(([x, y])=>[Math.round(w*0.37 + x*w*0.26), Math.round(h*0.08 + y*h*0.7)]);
+  const S = D.map(([x, y])=>[Math.round(w*0.37 + x*w*0.26), Math.round(h*0.05 + y*h*0.34)]);
   const seg = (a, b)=>{ const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) || 1; for(let k=0; k<=n; k++) g.fillRect(Math.round(a[0] + (b[0] - a[0])*k/n), Math.round(a[1] + (b[1] - a[1])*k/n), 1, 1); };
   g.fillStyle = 'rgba(255,214,90,0.6)';
   [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]].forEach(([a, b])=>seg(S[a], S[b]));
@@ -846,8 +952,9 @@ for(let j=0; j<=CAPE_NR; j++){
   const sj = j/CAPE_NR;
   for(let i=0; i<CAPE_NC; i++){
     const th = 2*Math.PI*i/CAPE_NC, tri = capeTri(i);
-    const r = CAPE_RC + (CAPE_RH - CAPE_RC)*(1 - (1 - sj)**2)*(1 + 0.16*tri*sj*sj);   // 先往外搭在“肩”上，再往下垂
-    const y = CAPE_YC - CAPE_L*(Math.pow(sj, 1.25) + 0.7*tri*sj*sj);                 // 尖角越往下越长
+    const sh = Math.min(1, sj*1.7);
+    const r = CAPE_RC + (CAPE_RH - CAPE_RC)*(1 - (1 - sh)**2)*(1 + 0.12*tri*sj*sj);   // 先往外搭在“肩”上，过了肩就差不多直直往下垂
+    const y = CAPE_YC - CAPE_L*(0.38 + 1.3*tri)*Math.pow(sj, 1.15);                 // 两片之间的开口只到肩下，尖角一直垂下去：一片片 V 形长襟
     CAPE.R0.push(new V3(Math.cos(th)*r, y, Math.sin(th)*r)); CAPE.P.push(new V3()); CAPE.Q.push(new V3()); CAPE.T.push(new V3());
   }
 }
@@ -871,11 +978,34 @@ const trimGeo = new THREE.BufferGeometry();          // 下摆金边：沿下摆
 }
 const capeTrim = new THREE.Mesh(trimGeo, capeGold); capeTrim.frustumCulled = false; scene.add(capeTrim);
 const CAPE_PEAKS = Array.from({length:CAPE_NP}, (_, k)=>Math.round((k + 0.5)*CAPE_NC/CAPE_NP));
-const bellGeo = new THREE.SphereGeometry(0.024, 8, 6), capeBells = CAPE_PEAKS.map(()=>{ const m = new THREE.Mesh(bellGeo, hoopMat); scene.add(m); return m; });
+const bellGeo = new THREE.SphereGeometry(0.022, 8, 6), tasselGeo = new THREE.ConeGeometry(0.032, 0.085, 7, 1, true);   // 流苏：金结 + 往下散开的穗子
+tasselGeo.translate(0, -0.06, 0);
+const capeBells = CAPE_PEAKS.map(()=>{ const m = new THREE.Mesh(bellGeo, hoopMat); m.add(new THREE.Mesh(tasselGeo, capeGold)); scene.add(m); return m; });
 const capeClasp = new THREE.Group(); capeClasp.scale.setScalar(1.3); scene.add(capeClasp);   // 宝石扣钉在披肩正前方第二圈上，跟着布一起动
 { // 领口金边跟着身体
   const collar = new THREE.Mesh(new THREE.TorusGeometry(CAPE_RC + 0.004, 0.024, 6, 36), hoopMat);
   collar.rotation.x = Math.PI/2; collar.position.y = CAPE_YC + 0.004; body.add(collar);
+  // 小高领：从领口立起一圈星空料子，越往上越往外翻（像喇叭口，翻出去的上沿离开眼睛），正前方留开口；
+  // 开口两边的上角削成圆弧，不留尖角；金边从一边开口底下沿圆角绕上沿一整圈再下到另一边
+  const HG = 0.4, HC = 0.15, HR0 = CAPE_RC + 0.012, HR1 = CAPE_RC + 0.17, HN = 40, HV = 4, hv = [], huv = [];
+  const hPt = (i, v, out = 0)=>{
+    const g = HG*(1 + 0.25*v), a = g + (2*Math.PI - 2*g)*i/HN, da = Math.min(a - g, 2*Math.PI - g - a);
+    const hf = 0.45 + 0.55*Math.sin(Math.min(1, da/0.45)*Math.PI/2);                   // 开口处矮一些，圆圆地升上去
+    const r = HR0 + (HR1 - HR0)*Math.pow(v, 1.6) + out;
+    return [Math.cos(a)*r, CAPE_YC + HC*v*hf, Math.sin(a)*r];
+  };
+  for(let j=0; j<=HV; j++) for(let i=0; i<=HN; i++){ const v = j/HV; hv.push(...hPt(i, v)); huv.push(i/HN, 0.62 + 0.22*v); }
+  const hix = [];
+  for(let j=0; j<HV; j++) for(let i=0; i<HN; i++){ const a = j*(HN + 1) + i, b = a + 1, c = a + HN + 1, d = c + 1; hix.push(a, c, b, b, c, d); }
+  const hg = new THREE.BufferGeometry();
+  hg.setAttribute('position', new THREE.Float32BufferAttribute(hv, 3)); hg.setAttribute('uv', new THREE.Float32BufferAttribute(huv, 2)); hg.setIndex(hix); hg.computeVertexNormals();
+  body.add(new THREE.Mesh(hg, toon(0xffffff, {map:capeTex, side:THREE.FrontSide})), new THREE.Mesh(hg, capeLining));
+  const rim = [];
+  for(let j=0; j<HV; j++) rim.push(hPt(0, j/HV, 0.004));
+  for(let i=0; i<=HN; i++) rim.push(hPt(i, 1, 0.004));
+  for(let j=HV - 1; j>=0; j--) rim.push(hPt(HN, j/HV, 0.004));
+  const rc = new THREE.CatmullRomCurve3(rim.map(p=>new V3(...p)));
+  body.add(new THREE.Mesh(new THREE.TubeGeometry(rc, 160, 0.011, 5, false), hoopMat));
   capeClasp.add(new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.016, 4, 4), hoopMat));                 // 菱形金托
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.058, 0), toon(0x9a63f2)); gem.scale.set(0.82, 1, 0.5); capeClasp.add(gem);   // 八面体自带分面法线，本来就是切面宝石；卡通材质不认 flatShading，写了只会在控制台报警告
 }
@@ -944,7 +1074,7 @@ function updateCape(dt, t){
   }
   trimGeo.attributes.position.needsUpdate = true; trimGeo.computeVertexNormals();
   CAPE_PEAKS.forEach((i, k)=>{ const p = P[cIdx(CAPE_NR, i)]; capeBells[k].position.set(p.x, p.y - 0.02, p.z); });
-  { const v = W*3, p = P[cIdx(1, 0)]; _cv.set(na[v], na[v + 1], na[v + 2]);
+  { const v = 2*W*3, p = P[cIdx(2, 0)]; _cv.set(na[v], na[v + 1], na[v + 2]);
     capeClasp.position.copy(p).addScaledVector(_cv, 0.024); capeClasp.quaternion.setFromUnitVectors(_Zf0, _cv); }
 }
 const standMat = metalMat({base:0xa7abbd, hi:0xffffff, lo:0x37324a});           // 支架：镀铬
@@ -1730,7 +1860,7 @@ function applySong(S){
   SONG.rate = 1; SONG.T = -LEAD;
   for(const e of S.events){ e.hitAt = -99; e.hitIt = -1; }
 }
-const BUILTIN = prepSong(builtinSong());
+const BUILTIN = prepSong(builtinSong()); BUILTIN.uid = 'builtin';
 const LIB = [BUILTIN];
 applySong(BUILTIN);
 
@@ -1991,7 +2121,6 @@ function sortJelly(){
 }
 // 所有实体投影到地面（只有地面接收影子，鼓身上不叠阴影，免得发黑发脏）
 scene.traverse(o=>{ if(o.isMesh && o !== floor && o !== shadowCatcher){ o.castShadow = true; if(o.isInstancedMesh) o.frustumCulled = false; } });
-
 // ---------- 导播：放歌时自动切镜头（全景、脸部特写、乐器特写、背影、俯拍、仰拍） ----------
 let camLabel = '用户透视';
 const INAME = {kick:'底鼓', snare:'军鼓', hihat:'踩镲', tom1:'高嗵', tom2:'中嗵', floor:'落地嗵', crash:'吊镲'};
@@ -2075,15 +2204,18 @@ function updateCamera(dt){
 
 // ---------- 主循环 ----------
 let last = performance.now(), skinClock = 0, memAcc = 0, fpsN = 0, fpsT = 0, FPS = 0, CAP = 0, lastDraw = 0;
+let HOLD = false;        // 开场页盖着舞台时：照常模拟，但不渲染，省显卡
 function frame(now){
   requestAnimationFrame(frame);
-  if(CAP && now - lastDraw < 1000/CAP - 2) return;        // 帧率上限：没到时间就跳过这一帧
-  lastDraw = now;
+  if(CAP){                                                  // 帧率上限：按时间表画，没到时间就跳过这一帧
+    const iv = 1000/CAP; if(now - lastDraw < iv - 2) return;
+    lastDraw = now - lastDraw < 2*iv ? lastDraw + iv : now;  // 累加而不是对齐到 now，高刷屏或帧间隔不均时才不会掉一大截；落后太多就重新对齐
+  }
   const raw = (now-last)/1000, dt = Math.min(1/20, raw); last = now; FDT = dt;
   fpsN++; fpsT += raw;
   if(fpsT >= 0.5){ FPS = Math.round(fpsN/fpsT); fpsN = 0; fpsT = 0; }   // 实测帧率，调节页里显示
   simT += dt;
-  if(playing) advanceSong(dt);
+  if(playing) advanceSong(Math.min(0.25, raw));             // 歌曲时钟走真实时间（卡一下也不拖慢节拍），只有物理模拟截断步长
   const lidA = updateCharacter(dt);
   body.position.copy(bodyBase); body.position.y += Math.sin(simT*1.3)*0.035 + CH.dip.x;
   body.rotation.set(CH.roll.x, -Math.PI/2 + CH.yaw.x, CH.nod.x + 0.02*Math.sin(simT*0.9));
@@ -2145,7 +2277,10 @@ function frame(now){
   sortJelly();
   mantleG.updateMatrixWorld();
   post.uniforms.projInv.value.copy(camera.projectionMatrixInverse); post.uniforms.camWorld.value.copy(camera.matrixWorld);
+  post.uniforms.pxA.value = camera.fov*Math.PI/180/H; post.uniforms.uT.value = simT;
   post.uniforms.mantleInv.value.copy(mantleG.matrixWorld).invert();
+  if(HOLD) return;
+  OPT.check(); OPT.prepass();
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
@@ -2183,7 +2318,7 @@ function rewind(){
 function setLoop(on){
   if(on === SONG.loop) return;
   if(SONG.loop && SONG.T > 0) SONG.T = songLocal(SONG.T);
-  SONG.loop = on; if(CUR) CUR.loop = on;
+  SONG.loop = on; if(CUR){ CUR.loop = on; SAVE.put(CUR); }
   if(playing){ startSongAudio(); resync(); }
   emit('state', state());
 }
@@ -2212,10 +2347,13 @@ fitLane(); new ResizeObserver(fitLane).observe(laneCv);
 const LROW = {crash:8, hihat:15, snare:22, tom1:29, tom2:29, floor:29, kick:37};
 const LCOL = {crash:'#e7c03c', hihat:'#f2e396', snare:'#ffffff', tom1:'#d2b2f5', tom2:'#ba83f0', floor:'#9b74e4', kick:'#f083a5'};
 const LSZ = {hihat:2, snare:3, tom1:3, tom2:3, floor:3, kick:4};
+const LFLASH = 0.1, LFADE = 0.8;                                // 鼓点过扫描线：闪 0.1 秒，再 0.8 秒暗成描边
+const LFL = {crash:'#ffe28a', hihat:'#fff1b8', snare:'#ffd6ea', tom1:'#ecdcff', tom2:'#dcc4ff', floor:'#cdb6ff', kick:'#ffb3cf'};
+const LDIM = {crash:'#7d6a35', hihat:'#857f60', snare:'#8d8bab', tom1:'#7a66a0', tom2:'#6c5596', floor:'#5f4f8c', kick:'#8c4d68'};
 let _ls = 11; const lrand = ()=>((_ls = (_ls*16807) % 2147483647) - 1)/2147483646;
 const SKY = Array.from({length:200}, ()=>({x:lrand()*1600, y:1 + Math.floor(lrand()*(LH - 2)), ph:lrand()*6.28, b:0.3 + 0.7*lrand()}));
 const STAR7 = ['...#...', '...#...', '..###..', '#######', '..###..', '...#...', '...#...'];
-const STAR5 = ['..#..', '.###.', '#####', '.###.', '..#..'];
+const STAR5 = ['..#..', '.###.', '#####', '.###.', '..#..'], STAR5O = ['..#..', '.#.#.', '#...#', '.#.#.', '..#..'];
 function glyph(ctx, G, cx, cy, col){ ctx.fillStyle = col; const o = G.length >> 1; G.forEach((row, j)=>{ for(let i=0;i<row.length;i++) if(row[i] === '#') ctx.fillRect(cx - o + i, cy - o + j, 1, 1); }); }
 function envAt(t){
   const E = SONG.env; if(!E || t < 0) return 0;
@@ -2256,12 +2394,22 @@ function drawLane(){
         lc.fillRect(x - 1, y - 1, z, 1); lc.fillRect(x - 1, y + 1, z, 1); lc.fillRect(x - 1, y, 1, 1); lc.fillRect(x + 1, y, 1, 1);
         lc.globalAlpha = 1; continue;
       }
-      lc.globalAlpha = past ? (lit ? 1 : 0.28) : 0.42 + 0.4*e.v;
-      if(e.i === 'crash') glyph(lc, STAR5, x, y, col);
-      else { const z = LSZ[e.i]; lc.fillStyle = col; lc.fillRect(x - (z >> 1), y - (z >> 1), z, z); }
+      const z = LSZ[e.i] || 3, age = T - (e.t + off), a0 = 0.42 + 0.4*e.v;
+      if(age < 0){                                               // 还没到：照原样
+        lc.globalAlpha = a0; if(e.i === 'crash') glyph(lc, STAR5, x, y, col); else { lc.fillStyle = col; lc.fillRect(x - (z >> 1), y - (z >> 1), z, z); }
+      } else if(age < LFLASH){                                   // 经过扫描线：用自己颜色的亮色闪一下
+        lc.globalAlpha = 1; const c = LFL[e.i];
+        if(e.i === 'crash') glyph(lc, STAR5, x, y, c); else { const zz = z + 2; lc.fillStyle = c; lc.fillRect(x - (zz >> 1), y - (zz >> 1), zz, zz); }
+      } else {                                                   // 然后 0.8 秒里慢慢暗成描边
+        const u = Math.min(1, (age - LFLASH)/LFADE), k = u*u*(3 - 2*u);
+        if(k < 1){ lc.globalAlpha = a0*(1 - k); if(e.i === 'crash') glyph(lc, STAR5, x, y, col); else { lc.fillStyle = col; lc.fillRect(x - (z >> 1), y - (z >> 1), z, z); } }
+        lc.globalAlpha = 0.62*k; const dc = LDIM[e.i];
+        if(e.i === 'crash') glyph(lc, STAR5O, x, y, dc);
+        else { const zz = z + 2, o = zz >> 1; lc.fillStyle = dc; lc.fillRect(x - o, y - o, zz, 1); lc.fillRect(x - o, y - o + zz - 1, zz, 1); lc.fillRect(x - o, y - o, 1, zz); lc.fillRect(x - o + zz - 1, y - o, 1, zz); }
+      }
       lc.globalAlpha = 1;
-      if(lit && fl >= 0 && fl < 0.35){                            // 刚打中：闪一下
-        const r = 2 + Math.round(fl*14); lc.fillStyle = 'rgba(255,255,255,' + (1 - fl/0.35).toFixed(2) + ')';
+      if(lit && fl >= 0 && fl < 0.35){                            // 刚打中：一圈淡粉的小十字散开
+        const r = 2 + Math.round(fl*14); lc.fillStyle = 'rgba(255,214,234,' + (1 - fl/0.35).toFixed(2) + ')';
         lc.fillRect(x - r, y, 1, 1); lc.fillRect(x + r, y, 1, 1); lc.fillRect(x, y - r, 1, 1); lc.fillRect(x, y + r, 1, 1);
       }
     }
@@ -2283,7 +2431,19 @@ function songInfo(){
 function updateTrackUI(){ emit('song', songInfo()); emit('lib', libInfo()); emit('state', state()); }
 function loadSong(S, autoplay){
   stopSongAudio(); applySong(S); updateTrackUI(); resync();
+  SAVE.last(S);
+  if(S.mode === 'audio' && !S.buffer && S.audioData) decodeStored(S);
   if(autoplay || playing) setPlaying(true);
+}
+// 存起来的歌只存了原文件，用到时再解码
+function decodeStored(S){
+  if(S.decoding) return; S.decoding = true;
+  if(!actx) initAudio();
+  job('解码中…', 0.3);
+  actx.decodeAudioData(S.audioData.slice(0), buf=>{
+    S.buffer = buf; S.decoding = false; job(null);
+    if(CUR === S){ SONG.buffer = buf; if(playing){ startSongAudio(); resync(); } }
+  }, ()=>{ S.decoding = false; job(null); msg('“' + S.name + '” 的音频解不开了，重新拖进来试试。', true); });
 }
 function summary(S){
   const c = {}; let drop = 0;
@@ -2295,7 +2455,8 @@ function msg(txt, err){ emit('msg', {txt, err:!!err}); }
 function addAndPlay(S, replace){
   prepSong(S);
   const i = replace ? LIB.findIndex(replace) : -1;
-  if(i >= 0) LIB[i] = S; else LIB.push(S);
+  if(i >= 0){ S.uid = LIB[i].uid; S.order = LIB[i].order; LIB[i] = S; } else LIB.push(S);
+  SAVE.put(S);
   loadSong(S, true);
 }
 
@@ -2316,13 +2477,14 @@ async function handleFile(f){
       if(f.size > 80e6) throw new Error('这个文件太大了（超过 80 MB），先转成 mp3 再试。');
       if(!actx) initAudio();
       job('解码中…', 0.02);
-      const ab = await f.arrayBuffer();
+      const ab = await f.arrayBuffer(), keep = ab.slice(0);
       let buf;
       try{ buf = await new Promise((res, rej)=>actx.decodeAudioData(ab, res, rej)); }
       catch(_){ throw new Error('浏览器解不开这个音频格式，换成 mp3 或 wav 试试。'); }
       if(my !== jobId) return;
       if(buf.duration > 600) throw new Error('这首歌超过 10 分钟了，先剪短一点再试。');
       S = await analyzeAudio(buf, p=>{ if(my === jobId) job('正在听这首歌…', 0.05 + 0.95*p); });
+      S.audioData = keep; S.mime = f.type;
     } else throw new Error('认不出这个文件。支持歌曲（mp3、wav、m4a、ogg、flac）、MIDI（.mid）和文本鼓谱（.txt）。');
     if(my !== jobId) return;
     job(null);
@@ -2611,7 +2773,7 @@ async function analyzeAudio(buf, prog){
 
 // 曲目单里预先放一段示例鼓谱
 const EXAMPLE_TAB = `BPM 108\nCC|x---------------|----------------|x---------------|----------------|\nHH|--x-x-x-x-x-x-x-|x-x-x-x-x-x-x-x-|--x-x-x-x-x-x-x-|x-x-x-x---------|\nSD|----o-------o---|----o-------o--g|----o-------o---|----o---o-------|\nT1|----------------|----------------|----------------|----------o-----|\nT2|----------------|----------------|----------------|------------o---|\nFT|----------------|----------------|----------------|--------------oo|\nBD|o-------o-o-----|o-----o-o-------|o-------o-o-----|o-----o---------|`;
-try{ const EX = parseTab(EXAMPLE_TAB); EX.name = '示例鼓谱 · 四小节带过门'; EX.kind = '示例'; LIB.push(prepSong(EX)); } catch(_){}
+try{ const EX = parseTab(EXAMPLE_TAB); EX.name = '示例鼓谱 · 四小节带过门'; EX.kind = '示例'; EX.uid = 'example'; LIB.push(prepSong(EX)); } catch(_){}
 
 // 左键拖动旋转，右键 / 中键 / Shift+拖动平移，滚轮或双指缩放，双指一起拖平移；没拖动的左键单击 = 点选落点
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -2674,11 +2836,180 @@ Object.assign(window.__dbg, {SONG, LIB, loadSong, parseTab, parseMidi, analyzeAu
 // ---------- Squiddle：界面（js/ui.js）只通过这个接口和舞台打交道 ----------
 // 事件：state {playing, loop, director, spot} · song {name, kind, mode, dur, loop, rate, speedLabel, meta} · lib [{i, name, kind, dur, bpm, current}]
 //       hit {key, label, drum, vel, rn, x, z, speed, parts} · aim {x, y, key}（点中了鼓，屏幕坐标） · camera '导播 · 全景' · job {txt, p} | null · msg {txt, err}
+// ---------- 省显卡：合并不动的零件 + 不动的影子只算一次 ----------
+// 场景还是照原样一件件搭出来（改零件照旧改搭建代码）。搭好以后，同一个父节点下、同一种材质、自己从来不动的零件，
+// 合成一块一起画；原件留在场景里（挪到第 31 层：不画，但点鼓的射线还能打到），每帧检查一遍：
+// 哪件原件被代码动了（位置、旋转、缩放、显隐、材质、形状），它所在那块就自动拆回原样，所以以后加动画也不用改这里。
+// 影子分两盏灯：直接挂在场景下、整场不动的零件，影子单独画进第二张影子图，只在开场和有零件拆回原样时画一次；
+// 平时每帧只给会动的东西画影子。（three.js 这版的影子不认灯的图层，所以用"临时只让不动的零件投影、单独补画一帧"来做。）
+const OPT = (()=>{
+  const L_HIDE = 31;
+  ray.layers.enable(L_HIDE);
+  const sunS = new THREE.DirectionalLight(0xffffff, 0);        // 只投影、不打光
+  sunS.position.copy(sun.position); sunS.target = sun.target; scene.add(sunS);
+  sunS.castShadow = true; sunS.shadow.mapSize.copy(sun.shadow.mapSize);
+  Object.assign(sunS.shadow.camera, {left:-6, right:6, top:6, bottom:-6, near:1, far:24}); sunS.shadow.camera.updateProjectionMatrix();
+  sunS.shadow.bias = sun.shadow.bias; sunS.shadow.normalBias = sun.shadow.normalBias;
+  sunS.shadow.autoUpdate = false; sunS.shadow.needsUpdate = false;
+  const groups = [], statics = new Set(), dummy = new THREE.WebGLRenderTarget(1, 1);
+  let staticDirty = true;
+  const sig = g => Object.keys(g.attributes).sort().map(k => k + g.attributes[k].itemSize).join(',');
+  // 材质按"长得一样"归类（搭建时每件零件各 new 一份材质）；着色器材质各有各的参数，只认同一个对象
+  const hx = c => c ? c.getHex() : '';
+  const msig = m => m.isShaderMaterial ? m.uuid : [m.type, hx(m.color), hx(m.emissive), m.map ? m.map.uuid : '', m.gradientMap ? m.gradientMap.uuid : '', m.side, m.vertexColors, m.opacity, m.fog, m.depthTest, m.depthWrite, m.polygonOffset, m.wireframe, m.visible].join('|');
+  function eligible(o){
+    if(!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o === floor || o === shadowCatcher || !o.parent) return false;
+    if(Array.isArray(o.material) || (o.material.isShaderMaterial && !o.material.userData.mergeable) || o.material.transparent ||   // 自写着色器可能用局部坐标，只合并标了 mergeable 的
+       o.renderOrder !== 0 || !o.visible || !o.layers.test(camera.layers)) return false;
+    if(o.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || JELLY.some(J=>J.m === o)) return false;
+    const g = o.geometry; if(!g || !g.attributes.position || Object.keys(g.morphAttributes || {}).length) return false;   // 盒子、圆柱自带分组，单材质时不影响
+    return true;
+  }
+  const snap = o => ({p:o.position.clone(), q:o.quaternion.clone(), s:o.scale.clone(), m:o.matrix.clone(), vis:o.visible, mat:o.material, ms:msig(o.material), geo:o.geometry, ver:o.geometry.attributes.position.version, ro:o.renderOrder});
+  const changed = (o, k) => o.visible !== k.vis || o.material !== k.mat || msig(o.material) !== k.ms || o.geometry !== k.geo || o.renderOrder !== k.ro || o.geometry.attributes.position.version !== k.ver
+    || !o.position.equals(k.p) || !o.quaternion.equals(k.q) || !o.scale.equals(k.s) || !o.matrix.equals(k.m);   // 有的零件直接改 matrix
+  function mergeGeo(list){
+    const g0 = list[0].geometry, names = Object.keys(g0.attributes), out = {}, idx = [];
+    let nv = 0; for(const o of list) nv += o.geometry.attributes.position.count;
+    for(const n of names) out[n] = new Float32Array(nv*g0.attributes[n].itemSize);
+    const v = new V3(), nm = new THREE.Matrix3(); let base = 0;
+    for(const o of list){
+      const g = o.geometry, c = g.attributes.position.count; nm.getNormalMatrix(o.matrix);
+      for(const n of names){
+        const A = g.attributes[n], k = A.itemSize, O = out[n];
+        for(let i=0; i<c; i++){
+          if(n === 'position' || n === 'normal'){
+            v.fromBufferAttribute(A, i); if(n === 'position') v.applyMatrix4(o.matrix); else v.applyMatrix3(nm).normalize();
+            O[(base + i)*3] = v.x; O[(base + i)*3 + 1] = v.y; O[(base + i)*3 + 2] = v.z;
+          } else for(let j=0; j<k; j++) O[(base + i)*k + j] = A.getComponent ? A.getComponent(i, j) : A.array[i*k + j];
+        }
+      }
+      if(g.index){ const I = g.index.array; for(let i=0; i<I.length; i++) idx.push(I[i] + base); }
+      else for(let i=0; i<c; i++) idx.push(base + i);
+      base += c;
+    }
+    const m = new THREE.BufferGeometry();
+    for(const n of names) m.setAttribute(n, new THREE.BufferAttribute(out[n], g0.attributes[n].itemSize, g0.attributes[n].normalized));
+    m.setIndex(nv > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+    m.computeBoundingSphere(); m.computeBoundingBox();
+    return m;
+  }
+  function build(){
+    const buckets = new Map();
+    scene.traverse(o=>{
+      if(!eligible(o)) return;
+      const key = o.parent.uuid + '|' + msig(o.material) + '|' + o.castShadow + '|' + o.receiveShadow + '|' + o.frustumCulled + '|' + sig(o.geometry);
+      if(o.matrixAutoUpdate) o.updateMatrix();
+      if(!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(o);
+    });
+    for(const list of buckets.values()){
+      const P = list[0].parent, stat = P === scene, G = {list, snaps:list.map(snap), stat, merged:null, dead:false};
+      if(list.length > 1){
+        const m = new THREE.Mesh(mergeGeo(list), list[0].material);
+        m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow; m.frustumCulled = list[0].frustumCulled;
+        m.matrixAutoUpdate = false;
+        P.add(m); G.merged = m;
+        for(const o of list) o.layers.set(L_HIDE);
+      }
+      if(stat){ G.cast = list[0].castShadow; const t = G.merged || list[0]; if(t.castShadow){ statics.add(t); t.castShadow = false; } }
+      groups.push(G);
+    }
+    staticDirty = true;
+  }
+  function split(G){
+    if(G.stat){ const t = G.merged || G.list[0]; if(statics.delete(t)) t.castShadow = G.cast; staticDirty = true; }
+    if(G.merged){ G.merged.parent.remove(G.merged); G.merged.geometry.dispose(); G.merged = null; }
+    for(const o of G.list) o.layers.set(0);
+    G.dead = true;
+  }
+  let on = false;
+  return {
+    enable(){ if(on) return; on = true; build(); },
+    disable(){ if(!on) return; on = false; groups.forEach(G=>{ if(!G.dead) split(G); }); groups.length = 0; staticDirty = true; },
+    // 需要时先单独补画一帧：只让不动的零件投影，画进第二张影子图（画面画到 1×1 的空目标上丢掉）
+    prepass(){
+      if(!staticDirty) return; staticDirty = false;
+      const off = []; scene.traverse(o=>{ if(o.isMesh && o.castShadow){ off.push(o); o.castShadow = false; } });
+      statics.forEach(o=>{ o.castShadow = true; });
+      sun.shadow.autoUpdate = false; sunS.shadow.needsUpdate = true;
+      const rt0 = renderer.getRenderTarget(); renderer.setRenderTarget(dummy); renderer.render(scene, camera); renderer.setRenderTarget(rt0);
+      statics.forEach(o=>{ o.castShadow = false; }); off.forEach(o=>{ o.castShadow = true; }); sun.shadow.autoUpdate = true;
+    },
+    check(){
+      if(!on) return;
+      for(const G of groups){ if(G.dead) continue; for(let i=0; i<G.list.length; i++) if(changed(G.list[i], G.snaps[i])){ split(G); break; } }
+    },
+    dirty(){ staticDirty = true; },     // 外部手动改了不动零件、又不想等自动检查时用
+    stats(){ const live = groups.filter(G=>!G.dead); return {groups:live.length, merged:live.filter(G=>G.merged).reduce((a, G)=>a + G.list.length, 0), split:groups.length - live.length}; },
+  };
+})();
+OPT.enable();
+window.__dbg.OPT = OPT;
+window.__dbg.redraw = ()=>{ scene.updateMatrixWorld(); OPT.prepass(); renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(postScene, postCam); };
+window.__dbg.song = ()=>({buffer:!!SONG.buffer, src:!!songSrc});
+
+// ---------- 记住拖进来的歌（存在本机 IndexedDB 里：鼓点 + 原音频文件），下次打开还在 ----------
+// 内置节奏和示例鼓谱不存；上次放的是哪首记在 localStorage。存不了（隐私模式等）就跟以前一样只在本次有效。
+const SAVE = (()=>{
+  const LAST = 'squiddle.lastSong';
+  let db = null, ready = null, restoring = true;
+  const user = S => S && S.uid !== 'builtin' && S.uid !== 'example';
+  function open(){
+    if(ready) return ready;
+    ready = new Promise(res=>{
+      try{
+        const r = indexedDB.open('squiddle', 1);
+        r.onupgradeneeded = ()=>r.result.createObjectStore('songs', {keyPath:'uid'});
+        r.onsuccess = ()=>{ db = r.result; res(db); };
+        r.onerror = r.onblocked = ()=>res(null);
+      } catch(_){ res(null); }
+    });
+    return ready;
+  }
+  const tx = (mode, f) => open().then(d=>{ if(!d) return null; return new Promise(res=>{
+    try{ const t = d.transaction('songs', mode), q = f(t.objectStore('songs')); t.oncomplete = ()=>res(q && q.result); t.onerror = t.onabort = ()=>res(null); }
+    catch(_){ res(null); }
+  }); });
+  function rec(S){
+    return {uid:S.uid, order:S.order, name:S.name, kind:S.kind, mode:S.mode, bpm:S.bpm, dur:S.dur, loop:S.loop, bar0:S.bar0 || 0,
+      auto:!!S.auto, pasted:!!S.pasted, beats:S.beats, env:S.env || null, audio:S.audioData || null, mime:S.mime || '',
+      events:S.events.map(e=>({t:e.t, i:e.i, v:e.v, r:e.r, a:e.a}))};
+  }
+  return {
+    put(S){
+      if(!user(S)) return;
+      if(!S.uid){ S.uid = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); S.order = Date.now(); }
+      tx('readwrite', st=>st.put(rec(S))).then(ok=>{ if(ok === null && S.audioData) msg('电脑空间不够，这首歌这次能放，但下次打开不会留着。', true); });
+    },
+    del(S){ if(user(S) && S.uid) tx('readwrite', st=>st.delete(S.uid)); },
+    last(S){ if(!restoring) try{ localStorage.setItem(LAST, S.uid || ''); } catch(_){} },
+    async restore(){
+      const all = await tx('readonly', st=>st.getAll()) || [];
+      all.sort((a, b)=>(a.order || 0) - (b.order || 0));
+      for(const r of all){
+        try{
+          const S = {uid:r.uid, order:r.order, name:r.name, kind:r.kind, mode:r.mode, bpm:r.bpm, dur:r.dur, loop:r.loop, bar0:r.bar0,
+            auto:r.auto, pasted:r.pasted, beats:r.beats, env:r.env, audioData:r.audio, mime:r.mime, buffer:null,
+            events:r.events.map(e=>EV(e.t, e.i, e.v, e.r, e.a))};
+          if(S.mode === 'audio' && !S.audioData) continue;
+          LIB.push(prepSong(S));
+        } catch(_){}
+      }
+      let id = null; try{ id = localStorage.getItem(LAST); } catch(_){}
+      const S = id && LIB.find(X=>X.uid === id);
+      restoring = false;
+      if(S && S !== CUR) loadSong(S, false); else emit('lib', libInfo());
+    },
+  };
+})();
+SAVE.restore();
+
 new ResizeObserver(()=>fitView(canvas.clientWidth, canvas.clientHeight)).observe(canvas);
 fitView(canvas.clientWidth, canvas.clientHeight);
 window.Squiddle = {
   on(type, f){ (BUS[type] = BUS[type] || []).push(f); },
   state, song:songInfo, lib:libInfo, camera:()=>camLabel,
+  lane(){ return {phx:PHX, lw:LW, lh:LH, pps:PPS, row:LROW, col:LCOL}; },
   time(){ return {t:SONG.T < 0 ? 0 : Math.min(SONG.dur, songLocal(SONG.T)), dur:SONG.dur}; },
   fps:()=>FPS,
   play(on){ setPlaying(on === undefined ? !playing : !!on); },
@@ -2692,9 +3023,9 @@ window.Squiddle = {
   selectSong(i){ const S = LIB[i]; if(S) loadSong(S, true); },
   removeSong(i){
     const S = LIB[i]; if(!S || LIB.length <= 1) return;
-    LIB.splice(i, 1);
+    LIB.splice(i, 1); SAVE.del(S);
     if(S === CUR) loadSong(LIB[Math.min(i, LIB.length - 1)], playing); else emit('lib', libInfo());
   },
-  unlockAudio, exampleTab:EXAMPLE_TAB, view:canvas,
+  unlockAudio, hold(v){ HOLD = !!v; }, exampleTab:EXAMPLE_TAB, view:canvas,
 };
 })();

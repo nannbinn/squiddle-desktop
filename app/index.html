@@ -10,24 +10,24 @@
 <body>
 <div class="win" id="win">
   <header class="tb">
-    <div class="logo"><span class="s" aria-hidden="true"></span><span id="logoT">Squiddle</span></div>
-    <div class="meter" id="meter" aria-hidden="true"></div>
-    <div class="now" id="tbNow"></div>
+    <div class="logo"><span class="s" aria-hidden="true"></span><span class="lg" data-text="Squiddle"><span id="logoT">Squiddle</span></span></div>
+    <div class="vu" id="vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <span class="sp"></span>
     <div class="wbtns" id="wbtns" hidden>
-      <button type="button" id="wMin" aria-label="最小化" title="最小化">_</button>
-      <button type="button" id="wMax" aria-label="最大化" title="最大化">[]</button>
-      <button type="button" id="wClose" class="x" aria-label="关闭" title="关闭">x</button>
+      <button type="button" id="wMin" aria-label="最小化" title="最小化"><svg class="px" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 8h10v1H0z"/></svg></button>
+      <button type="button" id="wMax" aria-label="最大化" title="最大化"><svg class="px i-max" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path fill-rule="evenodd" d="M0 0h10v10H0zM1 2v7h8V2z"/></svg><svg class="px i-res" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path fill-rule="evenodd" d="M2 0h8v8H8V2H2zM0 2h8v8H0zM1 4v5h6V4z"/></svg></button>
+      <button type="button" id="wClose" class="x" aria-label="关闭" title="关闭"><svg class="px" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0h2v1h1v1h1v1h2V2h1V1h1V0h2v2H9v1H8v1H7v2h1v1h1v1h1v2H8V9H7V8H6V7H4v1H3v1H2v1H0V8h1V7h1V6h1V4H2V3H1V2H0z"/></svg></button>
     </div>
   </header>
 
+  <div class="body">
   <main class="stagewrap" id="stagewrap">
     <div class="stage" id="stage">
       <div class="screen">
       <canvas id="view" width="320" height="180" aria-label="像素风鱿鱼用触手打架子鼓的实时画面：拖动旋转，右键或双指拖动平移，滚轮或双指捏合缩放，点鼓让它打一下"></canvas>
-      <div class="cam" id="cam" aria-live="off">用户透视</div>
+      <div class="cam" id="cam" aria-live="off"><span id="camT">用户透视</span></div>
       </div>
       <div class="dropveil" aria-hidden="true">+-- 松手就加到曲目里 --+</div>
-      <button class="start" id="start" type="button" hidden>点击开启声音</button>
     </div>
 
     <aside class="drawer" id="drawer" aria-label="菜单">
@@ -35,48 +35,51 @@
         <button role="tab" id="tab-lib" aria-controls="pane-lib" aria-selected="true" type="button">曲目</button>
         <button role="tab" id="tab-adj" aria-controls="pane-adj" aria-selected="false" tabindex="-1" type="button">调节</button>
         <button role="tab" id="tab-hit" aria-controls="pane-hit" aria-selected="false" tabindex="-1" type="button">刚才这一下</button>
-        <button class="close" type="button" id="drawerX" aria-label="收起菜单" title="收起 (Esc)">&gt;</button>
+        <button class="close" type="button" id="drawerX" aria-label="收起菜单" title="收起 (Esc)"><svg class="px" width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><path d="M1 0h2v1h1v1h1v1h1v2H5v1H4v1H3v1H1V7h1V6h1V5h1V3H3V2H2V1H1z"/></svg></button>
         <span class="ind" id="ind"></span>
       </div>
-      <div class="panes">
+      <div class="panes" id="panes">
         <section class="pane on" id="pane-lib" role="tabpanel" aria-labelledby="tab-lib">
           <button class="drop" id="drop" type="button" aria-label="打开文件">
-            <span class="in"><b class="rv">拖歌、MIDI 或鼓谱进来</b><span class="rv">或按 Ctrl+O</span></span>
+            <svg class="px" viewBox="0 0 16 16" aria-hidden="true"><path d="M7 1h2v7h2V7h1v1h1v1h-1v1h-1v1h-1v1H7v-1H6v-1H5V9H4V8h1V7h1v1h1zM1 10h2v3h10v-3h2v5H1z"/></svg>
+            <span class="rv">拖歌、MIDI 或鼓谱进来</span>
+            <span class="sub"><span class="rv">或者按</span> <kbd>Ctrl</kbd><kbd>O</kbd></span>
           </button>
-          <p class="h rv">// 曲目</p>
+          <p class="h"><span class="rv">曲目</span><span class="n" id="songN"></span></p>
           <ul class="songs" id="songs" aria-label="曲目单"></ul>
           <details class="paste" id="paste">
-            <summary class="rv">粘贴文本鼓谱</summary>
+            <summary><svg class="px" viewBox="0 0 8 8" aria-hidden="true"><path d="M3 0h2v3h3v2H5v3H3V5H0V3h3z"/></svg><span class="rv">粘贴文本鼓谱</span></summary>
             <textarea id="tabText" rows="9" wrap="off" spellcheck="false" aria-label="文本鼓谱"></textarea>
-            <button class="pbtn" id="tabGo" type="button">演奏这段</button>
+            <button class="btn" id="tabGo" type="button">演奏这段</button>
             <p class="hint">每行一件乐器：CC 吊镲、HH 踩镲、RD 叮叮镲（归踩镲打）、SD 军鼓、T1 高嗵、T2 中嗵、FT 落地嗵、BD 底鼓。x 或 o 是一下，大写更重，g 是轻点，- 是空拍。两条竖线之间是一小节，格数随意，16 格就是十六分音符。开头一行写速度，比如 BPM 108。</p>
           </details>
         </section>
 
         <section class="pane" id="pane-adj" role="tabpanel" aria-labelledby="tab-adj">
-          <p class="h rv">// 演奏</p>
+          <p class="h"><span class="rv">演奏</span></p>
           <label class="ctl"><span class="rv">速度</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="speed" min="50" max="160" value="100"></span><output id="speedV">100 BPM</output></label>
           <label class="ctl"><span class="rv">鼓声</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="drumVol" min="0" max="100" value="70"></span><output id="drumVolV">70</output></label>
           <label class="ctl" id="songVolL" hidden><span class="rv">原曲</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="songVol" min="0" max="100" value="80"></span><output id="songVolV">80</output></label>
           <label class="ctl"><span class="rv">鼓皮张力</span><span class="pbar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="tune" min="60" max="160" value="100"></span><output id="tuneV">100%</output></label>
-          <p class="h rv gap">// 帧率上限</p>
+          <p class="h gap"><span class="rv">帧率上限</span></p>
           <div class="seg" role="radiogroup" id="seg" aria-label="帧率上限">
             <span class="th" id="segTh"></span>
             <button role="radio" type="button" aria-checked="true" data-cap="0">跟屏幕</button>
             <button role="radio" type="button" aria-checked="false" data-cap="60">60</button>
             <button role="radio" type="button" aria-checked="false" data-cap="30">30</button>
           </div>
-          <div class="fps"><span>实测 <output id="fpsV">--</output></span><span class="gr" id="fpsGr" aria-hidden="true"></span></div>
-          <button class="pbtn" type="button" id="resetView">重置视角</button>
+          <div class="fps"><span>实测 <output id="fpsV">--</output></span><span class="spark2" id="fpsGr" aria-hidden="true"></span></div>
+          <button class="btn" type="button" id="resetView"><svg class="px" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h5v1h1v1h1v1h1v6h-1v1h-1v1h-1v1H6v-1H5v-1H4v-1h2v1h5v-1h1V5h-1V4H6v1H5v2h2v2H2V4h1V3h2V2z"/></svg><span class="rv">重置视角</span></button>
         </section>
 
         <section class="pane" id="pane-hit" role="tabpanel" aria-labelledby="tab-hit">
-          <p class="h rv">// 振动模态</p>
-          <pre class="spec" id="spec" aria-hidden="true"></pre>
+          <p class="h"><span class="rv">振动模态</span></p>
+          <div class="specbox"><canvas id="spec" aria-hidden="true"></canvas><div class="ax"><span id="axLo">60</span><span id="axHi">10k Hz</span></div></div>
+          <p class="h"><span class="rv">鼓皮</span></p>
           <div class="head">
-            <pre id="headArt" aria-hidden="true"></pre>
+            <canvas id="headCv" aria-hidden="true"></canvas>
             <div class="hitinfo">
-              <div><b id="hName">--</b></div>
+              <b id="hName">--</b>
               <div>位置 <span class="v" id="hPos">--</span></div>
               <div>力度 <span class="v" id="hVel">--</span></div>
               <div>拍速 <span class="v" id="hSpd">--</span></div>
@@ -87,37 +90,42 @@
     </aside>
     <div class="toasts" id="toasts" aria-live="polite"></div>
   </main>
+  </div>
 
   <footer class="player">
     <div class="prow">
-      <button class="pbtn play" id="play" type="button" aria-label="播放">
-        <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h2v1h2v1h2v1h2v2h1v2h-1v2h-2v1H8v1H6v1H4z"/></svg>
-        <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>
+      <button class="btn play" id="play" type="button" aria-label="播放">
+        <svg class="px i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h2v1h2v1h2v1h2v2h1v2h-1v2h-2v1H8v1H6v1H4z"/></svg>
+        <svg class="px i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>
       </button>
-      <button class="pbtn" id="rewind" type="button" aria-label="回到开头"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h2v12H2zM12 2h2v12h-2v-1h-2v-1H8v-1H6V9H5V7h1V5h2V4h2V3h2z"/></svg></button>
+      <button class="btn" id="rewind" type="button" aria-label="回到开头" title="回到开头"><svg class="px" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h2v12H2zM12 2h2v12h-2v-1h-2v-1H8v-1H6V9H5V7h1V5h2V4h2V3h2z"/></svg></button>
       <div class="ptitle"><b id="pTitle"></b><span id="pMeta"></span></div>
-      <span class="time" id="time">0:00 / 0:00</span>
-      <button class="pbtn" id="loop" type="button" aria-pressed="true">循环</button>
-      <button class="pbtn" id="dir" type="button" aria-pressed="false" title="导播：放歌时自动切镜头"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 4h10v8H1zM3 6v4h6V6zM12 6h1V5h2v6h-2v-1h-1z"/></svg><span class="lbl">导播</span></button>
-      <button class="pbtn" id="spot" type="button" aria-pressed="false" title="聚光灯：舞台暗下来，只照亮鼓手"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4v2H9v2h1v2h1v2h1v2h1v3H3v-3h1V9h1V7h1V5h1V3H6zM6 12h4v-1H6z"/></svg><span class="lbl">聚光灯</span></button>
-      <button class="pbtn" id="menuBtn" type="button" aria-expanded="false" aria-controls="drawer" title="菜单 (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z"/></svg><span class="lbl">菜单</span></button>
+      <div class="grp">
+        <button class="btn" id="loop" type="button" aria-pressed="true" title="循环"><span class="lbl">循环</span></button>
+        <button class="btn" id="dir" type="button" aria-pressed="false" title="导播：放歌时自动切镜头"><svg class="px" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 4h10v8H1zM3 6v4h6V6zM12 6h1V5h2v6h-2v-1h-1z"/></svg><span class="lbl">导播</span></button>
+        <button class="btn" id="spot" type="button" aria-pressed="false" title="聚光灯：舞台暗下来，只照亮鼓手"><svg class="px" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4v2H9v2h1v2h1v2h1v2h1v3H3v-3h1V9h1V7h1V5h1V3H6zM6 12h4v-1H6z"/></svg><span class="lbl">聚光灯</span></button>
+      </div>
+      <button class="btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="drawer" title="菜单 (M)"><svg class="px" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z"/></svg><span class="lbl">菜单</span></button>
     </div>
-    <canvas class="lane" id="lane" width="320" height="44" aria-label="星轨：接下来要打的鼓点从右往左流过来，四芒星是现在的位置"></canvas>
-    <div class="pbar seek" id="seekBar"><span class="cells"></span><span class="fill"></span><span class="knob"></span><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="播放进度"></div>
+    <div class="tl">
+      <canvas class="lane" id="lane" width="320" height="44" aria-label="星轨：接下来要打的鼓点从右往左流过来，四芒星是现在的位置。可以左右拖动，单击跳到那里"></canvas>
+      <div class="seekrow"><span class="t0" id="t0">0:00</span><div class="pbar" id="seekBar"><span class="cells"></span><span class="fill"></span><canvas class="mag" aria-hidden="true"></canvas><span class="glow"></span><span class="knob"></span><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="播放进度"></div><span class="t1" id="t1">0:00</span></div>
+    </div>
   </footer>
 
+  <canvas class="fx" id="fx" aria-hidden="true"></canvas>
   <div class="splash" id="splash" aria-hidden="true">
+    <canvas class="glyphs" id="glyphs"></canvas>
     <div class="box">
-      <canvas id="logo" width="162" height="58"></canvas>
-      <pre class="sq" id="sq"></pre>
+      <div class="sq" id="sq"></div>
       <div class="load"><span id="loadStep"></span><span id="loadBar"></span></div>
+      <div class="go" id="go"></div>
     </div>
   </div>
 </div>
 <div class="scrim" id="scrim"></div>
 <input type="file" id="file" hidden accept=".mid,.midi,.kar,.rmi,.txt,.tab,.mp3,.wav,.ogg,.oga,.m4a,.aac,.flac,.opus,.webm,audio/*">
 
-<script src="js/logo.js"></script>
 <script src="vendor/three.min.js"></script>
 <script src="js/stage.js"></script>
 <script src="js/ui.js"></script>
