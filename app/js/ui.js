@@ -423,24 +423,33 @@ function laneSpark(key, vel){
   const B = rel(laneCv), k = B.h/L.lh, x = B.x + (L.phx + .5)*k, y = B.y + y0*k, c = hex(L.col[key]);
   for(let i=0; i<3 + Math.round(vel*4); i++) emitFx({x, y, vx: -(20 + Math.random()*70), vy: (Math.random() - .5)*40, drag: 2.2, dec: 1.1 + Math.random()*.9, c, tw: true});
 }
-/* 拖进度条时的"程序坞放大"：照常是 7px 一格的像素条，把手两边的格子按离把手的距离鼓起来（高斯），越近越高越宽，松手后慢慢收回 */
+/* 拖进度条时：手指下的那一格和左右各一格变大（很快），拖走以后留下的格子慢慢缩回去，像一条拖尾；松手后剩下的也慢慢收回 */
 const magCv = seekBar.querySelector('.mag'), magCtx = magCv.getContext('2d');
-let magK = 0, magX = 0;
+let magS = new Float32Array(0), magLive = false;
 const lerpC = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v)*t));
 const C_PLUM = [147, 64, 127], C_PINK = [240, 131, 165], C_WHITE = [255, 255, 255], C_OFF = [67, 69, 111];
 function drawMag(dt){
-  const on = seekBar.classList.contains('drag');
-  magK += ((on ? 1 : 0) - magK)*(1 - Math.exp(-dt*(on ? 30 : 3.2)));            // 放大很快（约 0.1 秒），收回慢慢来（约 0.8 秒）
-  if(magK < .01){ if(seekBar.classList.contains('mag-on')) seekBar.classList.remove('mag-on'); magK = 0; return; }
+  const on = seekBar.classList.contains('drag'), W = seekBar.clientWidth, N = Math.ceil(W/7);
+  if(magS.length !== N){ const o = magS; magS = new Float32Array(N); magS.set(o.subarray(0, Math.min(N, o.length))); }
+  if(!on && !magLive) return;
+  const ki = on ? Math.min(N - 1, Math.max(0, Math.floor(seekIn.value/1000*W/7))) : -9;
+  const up = 1 - Math.exp(-dt*30), down = 1 - Math.exp(-dt*2.6);                  // 变大约 0.1 秒，缩回约 1 秒
+  let any = false;
+  for(let i = 0; i < N; i++){
+    const tgt = i === ki ? 1 : Math.abs(i - ki) === 1 ? .7 : 0, v = magS[i];
+    magS[i] = v + (tgt - v)*(tgt > v ? up : down);
+    if(magS[i] < .01) magS[i] = 0; else any = true;
+  }
+  magLive = any || on;
+  if(!magLive){ seekBar.classList.remove('mag-on'); return; }
   seekBar.classList.add('mag-on');
-  const dpr = Math.max(1, Math.round(devicePixelRatio || 1)), W = seekBar.clientWidth, H = 28;
+  const dpr = Math.max(1, Math.round(devicePixelRatio || 1)), H = 28;
   if(magCv.width !== W*dpr || magCv.height !== H*dpr){ magCv.width = W*dpr; magCv.height = H*dpr; }
   const c = magCtx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
-  if(on) magX = seekIn.value/1000*W;                                              // 鼓包直接跟着手指拖到的位置；松手后停在松手的地方慢慢收回
-  const kx = magX, fw = parseFloat(seekBar.querySelector('.fill').style.width) || 0;
-  for(let x = 0; x < W; x += 7){
-    const d = (x + 2.5 - kx)/30, g = Math.exp(-d*d)*magK;
-    const w = 5 + Math.round(g*1.5), h = Math.round(10 + g*16), y = Math.round((H - h)/2);
+  const fw = parseFloat(seekBar.querySelector('.fill').style.width) || 0;
+  for(let i = 0; i < N; i++){
+    const x = i*7, g = magS[i];
+    const w = 5 + Math.round(g*2), h = Math.round(10 + g*16), y = Math.round((H - h)/2);
     let col;
     if(x < fw){ const t = x/Math.max(1, fw); col = t < .72 ? lerpC(C_PLUM, C_PINK, t/.72) : lerpC(C_PINK, C_WHITE, (t - .72)/.28); }
     else col = C_OFF;
