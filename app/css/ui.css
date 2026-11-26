@@ -236,6 +236,24 @@ kbd{font-family:var(--f);font-size:12px;color:var(--mist);padding:0 4px;border:1
 @keyframes flow{from{left:-240px}to{left:100%}}
 .pbar input{position:absolute;left:0;right:0;top:-7px;bottom:-7px;width:100%;height:auto;margin:0;opacity:0;cursor:pointer}
 
+/* 播放进度条：平时是一条很细的粒子线（2px 的点、3px 一格），鼠标放上去变回像素格条，拖动时再放大一圈。
+   条本身固定 20px 高，只是里面的格子长高变宽，所以上下的东西不会被挤得跳 */
+@property --h{syntax:'<length>';inherits:true;initial-value:2px}
+@property --pitch{syntax:'<length>';inherits:true;initial-value:3px}
+@property --cell{syntax:'<length>';inherits:true;initial-value:2px}
+#seekBar{height:20px;--h:2px;--pitch:3px;--cell:2px;transition:--h .22s var(--out),--pitch .22s var(--out),--cell .22s var(--out)}
+#seekBar:hover,#seekBar:has(input:focus-visible){--h:10px;--pitch:7px;--cell:5px}
+#seekBar.drag{--h:18px;--pitch:10px;--cell:8px;transition:--h .3s var(--spring),--pitch .3s var(--spring),--cell .3s var(--spring)}
+#seekBar .cells,#seekBar .fill{top:calc(50% - var(--h)/2);bottom:auto;height:var(--h)}
+#seekBar .cells{background:var(--panel2)}
+#seekBar:hover .cells,#seekBar.drag .cells{background:var(--raise)}
+#seekBar .glow{width:20px;height:16px;transition:width .3s var(--spring),height .3s var(--spring)}
+#seekBar:hover .glow{width:34px;height:28px}
+#seekBar.drag .glow{width:52px;height:44px}
+#seekBar .knob{height:16px}
+#seekBar.drag .knob{width:10px;height:28px;opacity:1;transform:translate(-50%,-50%)}
+#seekBar input{top:0;bottom:0}
+
 /* 全窗口粒子层 */
 .fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:8}
 

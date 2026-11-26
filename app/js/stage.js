@@ -21,12 +21,12 @@ const camera = new THREE.PerspectiveCamera(38, W/H, 0.3, 60);
 const post = new THREE.ShaderMaterial({
   uniforms:{tColor:{value:rt.texture}, tDepth:{value:rt.depthTexture}, px:{value:new THREE.Vector2(1/W,1/H)}, near:{value:camera.near}, far:{value:camera.far}, fogFar:{value:20}, ink:{value:new THREE.Color(0x1a1230)}, inkJ:{value:new THREE.Color(0x8a1f55)},
     projInv:{value:new THREE.Matrix4()}, camWorld:{value:new THREE.Matrix4()}, mantleInv:{value:new THREE.Matrix4()}, mantleH:{value:1.75},
-    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x22244c)}, beamC:{value:new THREE.Color(0xfff3c4)}},
+    uSpot:{value:0}, spotA:{value:new THREE.Vector3(0,12,0)}, spotAx:{value:new THREE.Vector3(0,-1,0)}, spotTan:{value:0.185}, spotL:{value:14}, floorY:{value:-0.95}, night:{value:new THREE.Color(0x22244c)}, beamC:{value:new THREE.Color(0xfff3c4)}, pxA:{value:0.0037}, uT:{value:0}},
   vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
   fragmentShader:`
     uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 px; uniform float near; uniform float far; uniform float fogFar; uniform vec3 ink; uniform vec3 inkJ;
     uniform mat4 projInv; uniform mat4 camWorld; uniform mat4 mantleInv; uniform float mantleH;
-    uniform float uSpot; uniform vec3 spotA; uniform vec3 spotAx; uniform float spotTan; uniform float spotL; uniform float floorY; uniform vec3 night; uniform vec3 beamC;
+    uniform float uSpot; uniform vec3 spotA; uniform vec3 spotAx; uniform float spotTan; uniform float spotL; uniform float floorY; uniform vec3 night; uniform vec3 beamC; uniform float pxA; uniform float uT;
     varying vec2 vUv;
     float lin(vec2 uv){ float z=texture2D(tDepth,uv).x*2.-1.; return 2.*near*far/(far+near-z*(far-near)); }
     float thr(float d){ return 0.09*d + 0.04; }
@@ -85,6 +85,89 @@ const post = new THREE.ShaderMaterial({
       }
       return acc/14.*(s1 - s0);
     }
+    // ---- 聚光灯夜景的远景：钉在世界里的像素星、两圈岩石山峰剪影、一座城堡 ----
+    const float TAU = 6.2831853;
+    float h1(float n){ return fract(sin(n*127.1 + 3.7)*43758.5453); }
+    // 星星按视线方向分格，每格最多一颗，只点亮离它最近的那一个像素：转视角时星星跟着天空一起转，还是一格一颗
+    vec3 starAt(vec3 rd, vec3 base){
+      float yaw = atan(rd.x, rd.z), pit = asin(clamp(rd.y, -1., 1.)), cs = .011;
+      float iy = floor(pit/cs), pc = (iy + .5)*cs, cw = cs/max(cos(pc), .2);
+      float ix = floor(yaw/cw), hs = hash(vec2(ix, iy) + 17.3);
+      if(hs < .962) return base;
+      vec2 st = vec2((ix + .2 + .6*fract(hs*31.7))*cw, (iy + .2 + .6*fract(hs*57.3))*cs);
+      vec2 dd = vec2((yaw - st.x)*cos(pit), pit - st.y);
+      if(max(abs(dd.x), abs(dd.y)) > pxA*.5) return base;
+      float tw = .75 + .25*sin(uT*(1.3 + 2.*fract(hs*13.1)) + hs*40.);      // 轻轻闪
+      return mix(base, vec3(.95, .94, 1.), (.3 + .45*fract(hs*97.))*tw);
+    }
+    // 一圈山：圆柱面上按角度排 n 座尖峰，两边坡度不一样（有的往一边斜），坡面往里凹，峰顶就尖；再加一点逐格的碎齿
+    float ridge(float a, float R, float seed, float n, float hmax, float base){
+      float h = base*(1. + .5*sin(a*3. + seed) + .3*sin(a*7. - seed*2.));
+      for(int k = 0; k < 16; k++){
+        float fk = float(k); if(fk >= n) break;
+        float c = (fk + .15 + .7*h1(fk + seed))/n*TAU;
+        float d = a - c; d = (d - TAU*floor((d + 3.14159265)/TAU))*R;
+        float hk = hmax*(.3 + .7*h1(fk*3.1 + seed)), wl = hk*(.45 + 1.1*h1(fk*5.7 + seed)), wr = hk*(.45 + 1.1*h1(fk*7.3 + seed));
+        float t = d < 0. ? -d/wl : d/wr;
+        h = max(h, hk*pow(max(0., 1. - t), 2.3));                                   // 坡面往里凹得更狠：细长的尖峰
+        h = max(h, hk*.55*pow(max(0., 1. - abs(d - (d < 0. ? -.45 : .5)*wl)/(.35*wl)), 2.));   // 主峰旁边的小副峰
+      }
+      // 碎齿：越高的地方石头越碎，剪影边缘一格一格地崩
+      return h + (h1(floor(a*R*2.5) + seed) - .5)*.22 + (h1(floor(a*R*.9) + seed*1.7) - .5)*.9*smoothstep(1., hmax, h);
+    }
+    // 城堡剪影（u 是沿山圈的横向距离、v 是离地高度，单位和场景一样）：0 = 没有，1 = 墙体，2 = 亮着的窗
+    float bx(vec2 q, float cx, float hw, float y0, float y1){ return step(abs(q.x - cx), hw)*step(y0, q.y)*step(q.y, y1); }
+    float sp(vec2 q, float cx, float hw, float y0, float y1){ float t = (q.y - y0)/(y1 - y0); return step(0., t)*step(t, 1.)*step(abs(q.x - cx), hw*(1. - t)); }
+    float castle(vec2 q){
+      if(abs(q.x) > 3.6 || q.y > 6.6 || q.y < -.5) return 0.;
+      float w = 0.;
+      w = max(w, bx(q, 0., 3.4, -1., .55 + .22*step(.5, fract(q.x*1.6))));             // 山脚下的小镇，屋顶高低错落
+      w = max(w, bx(q, -2.2, .7, -1., 1.05)); w = max(w, sp(q, -2.2, .75, 1.05, 1.5));
+      w = max(w, bx(q, .2, 1.45, -1., 2.2)); w = max(w, sp(q, .2, 1.45, 2.2, 2.75));      // 主殿和人字顶
+      w = max(w, bx(q, .55, .4, -1., 4.3)); w = max(w, sp(q, .55, .42, 4.3, 6.5));        // 主塔和尖顶
+      w = max(w, bx(q, -.5, .32, -1., 3.7)); w = max(w, sp(q, -.5, .34, 3.7, 5.5));       // 副塔
+      w = max(w, bx(q, 1.3, .15, -1., 2.9)); w = max(w, sp(q, 1.3, .17, 2.9, 3.65));      // 小尖塔
+      w = max(w, bx(q, -1.25, .17, -1., 2.6)); w = max(w, sp(q, -1.25, .19, 2.6, 3.35));
+      w = max(w, bx(q, 1.75, .11, -1., 2.35)); w = max(w, sp(q, 1.75, .13, 2.35, 2.9));
+      w = max(w, bx(q, -1.85, .11, -1., 2.95));                                            // 烟囱
+      w = max(w, bx(q, 2.65, .36, 1.1, 1.85)); w = max(w, sp(q, 2.65, .42, 1.85, 2.3));   // 右边的水塔
+      w = max(w, step(abs(abs(q.x - 2.65) - .27), .06)*step(q.y, 1.1));
+      if(w < .5) return 0.;
+      float win = bx(q, .95, .2, .75, 1.55)                                                 // 主殿的拱门透着光
+        + bx(q, .55, .07, 3.25, 3.55) + bx(q, .55, .07, 2.55, 2.8) + bx(q, -.5, .06, 2.9, 3.15)
+        + bx(q, -.75, .07, 1.3, 1.5) + bx(q, -.2, .07, 1.3, 1.5) + bx(q, -2.35, .07, .55, .75) + bx(q, 1.6, .07, .25, .42);
+      return win > .5 ? 2. : 1.;
+    }
+    // 视线打到以舞台为中心、半径 R 的竖直圆柱上的位置（相机总在圆柱里面，取往前那个交点）
+    float cylT(vec3 ro, vec3 rd, float R){
+      vec2 o = ro.xz - vec2(.1, -.4), d = rd.xz;
+      float a = dot(d, d), b = dot(o, d), c = dot(o, o) - R*R;
+      if(a < 1e-5) return -1.;
+      return (-b + sqrt(max(b*b - a*c, 0.)))/a;
+    }
+    vec3 horizon(vec3 ro, vec3 rd, float dist, vec3 cs, float bay){
+      vec3 farC = night*vec3(.6, .6, .7), nearC = night*vec3(.36, .36, .46), win = vec3(1., .8, .45);
+      for(int L = 0; L < 2; L++){
+        float R = L == 0 ? 46. : 30.;
+        float t = cylT(ro, rd, R);
+        if(t < 0. || t > dist) continue;
+        vec3 hp = ro + rd*t; float a = atan(hp.x - .1, hp.z + .4), v = hp.y - floorY;
+        if(v < -.05) continue;
+        float h = L == 0 ? ridge(a, R, 11.3, 16., 5.2, 1.2) : ridge(a, R, 4.7, 11., 8.5, .5);
+        vec3 col = L == 0 ? farC : nearC;
+        float k = 0.;
+        if(L == 1){                                                 // 城堡在默认视角的正后方偏右，周围的山让开一点
+          float u = a - 4.42; u = (u - TAU*floor((u + 3.14159265)/TAU))*R; k = castle(vec2(u, v));
+          h = mix(min(h, .9), h, smoothstep(4., 8., abs(u)));
+        }
+        if(v < h || k > .5){
+          vec3 m = k > 1.5 ? mix(nearC, win, .8) : col;
+          float mist = (1. - smoothstep(0., L == 0 ? 2.4 : 1.6, v))*.6;     // 山脚埋在薄雾里：越往下越接近夜空色
+          cs = mix(m, night, float(mist > bay)*(k > 1.5 ? 0. : 1.));
+        }
+      }
+      return cs;
+    }
     void main(){
       vec4 c4 = texture2D(tColor,vUv);
       vec3 c = c4.rgb;
@@ -117,8 +200,7 @@ const post = new THREE.ShaderMaterial({
         vec3 cs;
         if(emis) cs = c;
         else if(bg){
-          float hs = hash(floor(gl_FragCoord.xy));
-          cs = hs > 0.9965 ? mix(night, vec3(.95, .94, 1.), .3 + .45*fract(hs*97.)) : night;
+          cs = horizon(ro, rd, 1e4, starAt(rd, night), bay);
         } else {
           vec2 k = coneR(wp);
           float lit = k.y > 0. ? 1. - smoothstep(.88, 1.02, k.x) : 0.;
@@ -127,6 +209,7 @@ const post = new THREE.ShaderMaterial({
           vec3 on = c*vec3(1.03, 1., .93);
           if(flr) on = mix(night, on, .5 - .14*k.x*k.x);           // 地板上的光斑压暗一半，往边上再淡一点；鼓手和鼓照常亮
           cs = mix(mix(night, c, flr ? .04 : .09), on, lit);       // 光圈外：地面几乎和页面一样，东西留一点点轮廓
+          if(flr && lit < .01) cs = horizon(ro, rd, length(wp - ro), cs, bay);   // 远处地面上也能立起山脚
         }
         float g = 1. - exp(-beam(ro, rd, bg ? 40. : length(wp - ro))*.38);
         g = smoothstep(.03, .62, g);                               // 提一点对比，光柱的边更利落
@@ -820,18 +903,24 @@ const hoopMat = metalMat({base:0xe2ad3e, hi:0xfff6d2, lo:0x6f4e17});            
 // ---------- 星空披肩（代替原来的蓝围巾） ----------
 // 深靛蓝星空料子，和鼓壳同一路；小丑式尖角下摆镶一道金边，每个尖上挂一颗小金铃；领口一圈金边，正面一颗紫宝石扣；背后用金线绣北斗七星。
 // 布在世界空间里模拟：领口一圈钉在身上，其余各点有惯性和重力，再被弹簧拉回设计好的形状；碰到头和触手根会被推开
-const CAPE_NC = 48, CAPE_NR = 6, CAPE_NP = 8, CAPE_YC = RING_Y + 0.17, CAPE_RC = 0.255, CAPE_RH = 0.48, CAPE_L = 0.24;
+// 加长版：搭过肩以后往下垂成六片 V 形长襟，正前方两片中间开口，每个尖上挂一个金流苏
+const CAPE_NC = 48, CAPE_NR = 10, CAPE_NP = 6, CAPE_YC = RING_Y + 0.17, CAPE_RC = 0.255, CAPE_RH = 0.48, CAPE_L = 0.42;
 const capeTri = i => { const f = (i/CAPE_NC*CAPE_NP) % 1; return 1 - Math.abs(f*2 - 1); };   // 两个尖之间是 0，尖上是 1；正前方是凹口
-const capeTex = pixTex(256, 48, (g, w, h)=>{
+const capeTex = pixTex(256, 96, (g, w, h)=>{
   const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#272a78'); gr.addColorStop(1, '#3d42a8');
   g.fillStyle = gr; g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(176,164,255,0.3)';                                    // 一道淡淡的银河
   for(let x=0; x<w; x++){ const y = Math.round(h*0.64 + 5*Math.sin(x/w*Math.PI*6)); g.fillRect(x, y - 2, 1, 4); }
   let r = 9; const rnd = ()=>((r = (r*16807) % 2147483647) - 1)/2147483646;
-  for(let i=0; i<90; i++){ g.fillStyle = rnd() < 0.75 ? '#ffffff' : '#fff1a6'; g.fillRect(Math.floor(rnd()*w), Math.floor(rnd()*h), 1, 1); }
+  for(let i=0; i<170; i++){ g.fillStyle = rnd() < 0.75 ? '#ffffff' : '#fff1a6'; g.fillRect(Math.floor(rnd()*w), Math.floor(rnd()*h), 1, 1); }
+  for(let i=0; i<14; i++){                                                // 散落的金色四芒星，越往下摆越大
+    const x = 3 + Math.floor(rnd()*(w - 6)), y = Math.floor(h*0.42 + rnd()*h*0.5), a = y > h*0.7 ? 3 : 2;
+    if(Math.abs(x - w*0.5) < w*0.16 && y < h*0.45) continue;
+    g.fillStyle = '#e9b949'; g.fillRect(x - a, y, 2*a + 1, 1); g.fillRect(x, y - a - 1, 1, 2*a + 3); g.fillStyle = '#fff4c8'; g.fillRect(x, y, 1, 1);
+  }
   // 北斗七星：斗口四颗 + 斗柄三颗，绣在背后正中（u = 0.5）
   const D = [[0, 0.04], [0.03, 0.6], [0.3, 0.72], [0.34, 0.22], [0.55, 0.12], [0.76, 0.2], [1, 0.52]];
-  const S = D.map(([x, y])=>[Math.round(w*0.37 + x*w*0.26), Math.round(h*0.08 + y*h*0.7)]);
+  const S = D.map(([x, y])=>[Math.round(w*0.37 + x*w*0.26), Math.round(h*0.05 + y*h*0.34)]);
   const seg = (a, b)=>{ const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) || 1; for(let k=0; k<=n; k++) g.fillRect(Math.round(a[0] + (b[0] - a[0])*k/n), Math.round(a[1] + (b[1] - a[1])*k/n), 1, 1); };
   g.fillStyle = 'rgba(255,214,90,0.6)';
   [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]].forEach(([a, b])=>seg(S[a], S[b]));
@@ -846,8 +935,9 @@ for(let j=0; j<=CAPE_NR; j++){
   const sj = j/CAPE_NR;
   for(let i=0; i<CAPE_NC; i++){
     const th = 2*Math.PI*i/CAPE_NC, tri = capeTri(i);
-    const r = CAPE_RC + (CAPE_RH - CAPE_RC)*(1 - (1 - sj)**2)*(1 + 0.16*tri*sj*sj);   // 先往外搭在“肩”上，再往下垂
-    const y = CAPE_YC - CAPE_L*(Math.pow(sj, 1.25) + 0.7*tri*sj*sj);                 // 尖角越往下越长
+    const sh = Math.min(1, sj*1.7);
+    const r = CAPE_RC + (CAPE_RH - CAPE_RC)*(1 - (1 - sh)**2)*(1 + 0.12*tri*sj*sj);   // 先往外搭在“肩”上，过了肩就差不多直直往下垂
+    const y = CAPE_YC - CAPE_L*(0.38 + 1.3*tri)*Math.pow(sj, 1.15);                 // 两片之间的开口只到肩下，尖角一直垂下去：一片片 V 形长襟
     CAPE.R0.push(new V3(Math.cos(th)*r, y, Math.sin(th)*r)); CAPE.P.push(new V3()); CAPE.Q.push(new V3()); CAPE.T.push(new V3());
   }
 }
@@ -871,7 +961,9 @@ const trimGeo = new THREE.BufferGeometry();          // 下摆金边：沿下摆
 }
 const capeTrim = new THREE.Mesh(trimGeo, capeGold); capeTrim.frustumCulled = false; scene.add(capeTrim);
 const CAPE_PEAKS = Array.from({length:CAPE_NP}, (_, k)=>Math.round((k + 0.5)*CAPE_NC/CAPE_NP));
-const bellGeo = new THREE.SphereGeometry(0.024, 8, 6), capeBells = CAPE_PEAKS.map(()=>{ const m = new THREE.Mesh(bellGeo, hoopMat); scene.add(m); return m; });
+const bellGeo = new THREE.SphereGeometry(0.022, 8, 6), tasselGeo = new THREE.ConeGeometry(0.032, 0.085, 7, 1, true);   // 流苏：金结 + 往下散开的穗子
+tasselGeo.translate(0, -0.06, 0);
+const capeBells = CAPE_PEAKS.map(()=>{ const m = new THREE.Mesh(bellGeo, hoopMat); m.add(new THREE.Mesh(tasselGeo, capeGold)); scene.add(m); return m; });
 const capeClasp = new THREE.Group(); capeClasp.scale.setScalar(1.3); scene.add(capeClasp);   // 宝石扣钉在披肩正前方第二圈上，跟着布一起动
 { // 领口金边跟着身体
   const collar = new THREE.Mesh(new THREE.TorusGeometry(CAPE_RC + 0.004, 0.024, 6, 36), hoopMat);
@@ -944,7 +1036,7 @@ function updateCape(dt, t){
   }
   trimGeo.attributes.position.needsUpdate = true; trimGeo.computeVertexNormals();
   CAPE_PEAKS.forEach((i, k)=>{ const p = P[cIdx(CAPE_NR, i)]; capeBells[k].position.set(p.x, p.y - 0.02, p.z); });
-  { const v = W*3, p = P[cIdx(1, 0)]; _cv.set(na[v], na[v + 1], na[v + 2]);
+  { const v = 2*W*3, p = P[cIdx(2, 0)]; _cv.set(na[v], na[v + 1], na[v + 2]);
     capeClasp.position.copy(p).addScaledVector(_cv, 0.024); capeClasp.quaternion.setFromUnitVectors(_Zf0, _cv); }
 }
 const standMat = metalMat({base:0xa7abbd, hi:0xffffff, lo:0x37324a});           // 支架：镀铬
@@ -2148,6 +2240,7 @@ function frame(now){
   sortJelly();
   mantleG.updateMatrixWorld();
   post.uniforms.projInv.value.copy(camera.projectionMatrixInverse); post.uniforms.camWorld.value.copy(camera.matrixWorld);
+  post.uniforms.pxA.value = camera.fov*Math.PI/180/H; post.uniforms.uT.value = simT;
   post.uniforms.mantleInv.value.copy(mantleG.matrixWorld).invert();
   if(HOLD) return;
   renderer.setRenderTarget(rt); renderer.render(scene, camera);

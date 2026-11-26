@@ -102,7 +102,8 @@ S.on('song', info => showSong(info));
 /* 像素进度条：填充按整格走，把手跟着头 */
 function setBar(bar, p){
   p = Math.max(0, Math.min(1, p));
-  const W = bar.clientWidth, pitch = 7;
+  // 格子宽度跟着状态走：主进度条平时是 3px 一格的细粒子线，悬停 7px，拖动 10px
+  const W = bar.clientWidth, pitch = bar.id !== 'seekBar' ? 7 : bar.classList.contains('drag') ? 10 : bar.matches(':hover') ? 7 : 3;
   const fw = Math.min(W, Math.round(p*W/pitch)*pitch);
   bar.querySelector('.fill').style.width = fw + 'px';
   bar.querySelector('.knob').style.left = (p*W) + 'px';
@@ -425,7 +426,7 @@ function laneSpark(key, vel){
 function seekEmber(dt){
   if(!S.state().playing || scrub || Math.random() > dt*14) return;
   const B = rel(seekBar), fw = parseFloat(seekBar.querySelector('.fill').style.width) || 0;
-  emitFx({x: B.x + fw - 3, y: B.y + 2 + Math.random()*6, vx: -(6 + Math.random()*16), vy: -(4 + Math.random()*14), g: -6, drag: 1, dec: .9 + Math.random()*.6, c: Math.random() < .5 ? FXC.white : FXC.pink, tw: true});
+  emitFx({x: B.x + fw - 3, y: B.y + 7 + Math.random()*6, vx: -(6 + Math.random()*16), vy: -(4 + Math.random()*14), g: -6, drag: 1, dec: .9 + Math.random()*.6, c: Math.random() < .5 ? FXC.white : FXC.pink, tw: true});
 }
 const dropEl = $('#drop'); let dropHot = 0;
 dropEl.addEventListener('pointerenter', () => dropHot = 1);
