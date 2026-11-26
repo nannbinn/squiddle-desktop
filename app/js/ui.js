@@ -423,7 +423,7 @@ function laneSpark(key, vel){
   const B = rel(laneCv), k = B.h/L.lh, x = B.x + (L.phx + .5)*k, y = B.y + y0*k, c = hex(L.col[key]);
   for(let i=0; i<3 + Math.round(vel*4); i++) emitFx({x, y, vx: -(20 + Math.random()*70), vy: (Math.random() - .5)*40, drag: 2.2, dec: 1.1 + Math.random()*.9, c, tw: true});
 }
-/* 拖进度条时：手指下的那一格和左右各一格变大（很快），拖走以后留下的格子慢慢缩回去，像一条拖尾；松手后剩下的也慢慢收回 */
+/* 拖进度条时：手指下的那一格和左右各一格变大（很快），拖走以后留下的格子慢慢缩回去，像一条拖尾；松手后鼠标还在条上就慢慢收回，离开了就直接收成细条 */
 const magCv = seekBar.querySelector('.mag'), magCtx = magCv.getContext('2d');
 let magS = new Float32Array(0), magLive = false;
 const lerpC = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v)*t));
@@ -432,6 +432,7 @@ function drawMag(dt){
   const on = seekBar.classList.contains('drag'), W = seekBar.clientWidth, N = Math.ceil(W/7);
   if(magS.length !== N){ const o = magS; magS = new Float32Array(N); magS.set(o.subarray(0, Math.min(N, o.length))); }
   if(!on && !magLive) return;
+  if(!on && !seekBar.matches(':hover')){ magS.fill(0); magLive = false; seekBar.classList.remove('mag-on'); return; }   // 鼠标一离开进度条就不等拖尾了，直接收成细条
   const ki = on ? Math.min(N - 1, Math.max(0, Math.floor(seekIn.value/1000*W/7))) : -9;
   const up = 1 - Math.exp(-dt*30), down = 1 - Math.exp(-dt*2.6);                  // 变大约 0.1 秒，缩回约 1 秒
   let any = false;
