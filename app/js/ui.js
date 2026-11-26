@@ -425,18 +425,19 @@ function laneSpark(key, vel){
 }
 /* 拖进度条时的"程序坞放大"：照常是 7px 一格的像素条，把手两边的格子按离把手的距离鼓起来（高斯），越近越高越宽，松手后慢慢收回 */
 const magCv = seekBar.querySelector('.mag'), magCtx = magCv.getContext('2d');
-let magK = 0;
+let magK = 0, magX = 0;
 const lerpC = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v)*t));
 const C_PLUM = [147, 64, 127], C_PINK = [240, 131, 165], C_WHITE = [255, 255, 255], C_OFF = [67, 69, 111];
 function drawMag(dt){
   const on = seekBar.classList.contains('drag');
-  magK += ((on ? 1 : 0) - magK)*(1 - Math.exp(-dt*(on ? 16 : 10)));
+  magK += ((on ? 1 : 0) - magK)*(1 - Math.exp(-dt*(on ? 30 : 3.2)));            // 放大很快（约 0.1 秒），收回慢慢来（约 0.8 秒）
   if(magK < .01){ if(seekBar.classList.contains('mag-on')) seekBar.classList.remove('mag-on'); magK = 0; return; }
   seekBar.classList.add('mag-on');
   const dpr = Math.max(1, Math.round(devicePixelRatio || 1)), W = seekBar.clientWidth, H = 28;
   if(magCv.width !== W*dpr || magCv.height !== H*dpr){ magCv.width = W*dpr; magCv.height = H*dpr; }
   const c = magCtx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
-  const kx = parseFloat(seekBar.querySelector('.knob').style.left) || 0, fw = parseFloat(seekBar.querySelector('.fill').style.width) || 0;
+  if(on) magX = seekIn.value/1000*W;                                              // 鼓包直接跟着手指拖到的位置；松手后停在松手的地方慢慢收回
+  const kx = magX, fw = parseFloat(seekBar.querySelector('.fill').style.width) || 0;
   for(let x = 0; x < W; x += 7){
     const d = (x + 2.5 - kx)/30, g = Math.exp(-d*d)*magK;
     const w = 5 + Math.round(g*1.5), h = Math.round(10 + g*16), y = Math.round((H - h)/2);

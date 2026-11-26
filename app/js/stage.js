@@ -181,6 +181,42 @@ const post = new THREE.ShaderMaterial({
       }
       return cs;
     }
+    // 聚光灯下的地板花纹：一块圆形石雕地纹（八芒星 + 四个互相套着的圆 + 外圈石框和小圆钮 + 两道金线），
+    // 只算一张高度图，再沿灯光方向取一点差分当浮雕的明暗：朝灯的边亮、背灯的边暗，起伏很浅
+    const vec2 MED_C = vec2(-.5, -1.35), MED_L = vec2(.64, .77); const float MED_S = 1.18;   // 圆心放在光斑中间偏鼓手
+    float medH(vec2 q){
+      float r = length(q), h = 0., a = atan(q.y, q.x);
+      if(r > 3.6) return 0.;
+      h = max(h, step(abs(r - 3.2), .14)*.7);                                          // 外圈石框
+      h = max(h, step(abs(r - 1.45), .065)*.7);                                        // 星外的圆环
+      for(int k = 0; k < 4; k++){                                                      // 四个互相套着的圆
+        float b = .7853982 + float(k)*1.5707963;
+        h = max(h, step(abs(length(q - 1.45*vec2(cos(b), sin(b))) - 1.45), .06)*.7);
+      }
+      for(int k = 0; k < 8; k++){                                                      // 石框上八个小圆钮
+        float b = float(k)*.7853982; vec2 d = q - 3.2*vec2(cos(b), sin(b));
+        float rr = length(d); if(rr < .26) h = max(h, .9 + .5*(1. - rr/.26));
+      }
+      float sec = .3926991, t = abs(mod(a + sec, 2.*sec) - sec)/sec;                     // 0 = 星芒正中，1 = 两芒之间
+      float longP = mod(floor((a + sec)/(2.*sec)), 2.) < .5 ? 1. : 0.;               // 正十字方向四芒长、斜向四芒短
+      float Rp = mix(.72, 1.25, longP), R = mix(Rp, .26, pow(t, .55));
+      if(r < R) h = max(h, 1. + .9*(1. - t)*(1. - r/Rp));                              // 八芒星：每一芒中间起一道脊
+      return h;
+    }
+    float medGold(vec2 q, float w){
+      float r = length(q), a = atan(q.y, q.x);
+      if(r > 3.6) return 0.;
+      float g = step(abs(r - 2.92), w) + step(abs(r - 3.5), w);
+      float sec = .3926991, da = abs(mod(a + sec, 2.*sec) - sec)*r;                        // 八条放射金线，从星外圆环连到石框
+      g += step(da, w)*step(1.52, r)*step(r, 2.92);
+      return min(g, 1.);
+    }
+    float medTint(vec2 q){                                                             // 两个圆相交出来的花瓣里铺一层淡紫
+      float r = length(q); if(r < 1.52 || r > 2.9) return 0.;
+      float n = 0.;
+      for(int k = 0; k < 4; k++){ float b = .7853982 + float(k)*1.5707963; n += step(length(q - 1.45*vec2(cos(b), sin(b))), 1.45); }
+      return step(1.5, n);
+    }
     void main(){
       vec4 c4 = texture2D(tColor,vUv);
       vec3 c = c4.rgb;
@@ -219,9 +255,19 @@ const post = new THREE.ShaderMaterial({
           float lit = k.y > 0. ? 1. - smoothstep(.88, 1.02, k.x) : 0.;
           lit = clamp(floor(lit*3. + bay)/3., 0., 1.);
           bool flr = wp.y < floorY + .05;
-          vec3 on = c*vec3(1.03, 1., .93);
+          vec3 on = c*vec3(1.03, 1., .93), off = mix(night, c, flr ? .04 : .09);
           if(flr) on = mix(night, on, .5 - .14*k.x*k.x);           // 地板上的光斑压暗一半，往边上再淡一点；鼓手和鼓照常亮
-          cs = mix(mix(night, c, flr ? .04 : .09), on, lit);       // 光圈外：地面几乎和页面一样，东西留一点点轮廓
+          if(flr){
+            vec2 q = (wp.xz - MED_C)/MED_S;
+            float pw = pxA*length(wp - ro)/max(abs(rd.y), .12);    // 这个像素在地上大约多宽，细线至少一格宽
+            float s = max(.06, pw*1.6/MED_S), hq = medH(q), e = clamp(hq - medH(q + MED_L*s), -1., 1.);
+            float f = 1. + .26*floor(e*2. + .5)/2. + .07*hq - .05*step(length(q), 3.34);   // 圆盘里的石面略深一点，像嵌进地里的一块   // 浮雕：明暗分两档，像素风不出渐变
+            float gd = medGold(q, max(.022, pw*.55/MED_S)), tn = medTint(q);
+            on *= f; on = mix(on, on*vec3(1.06, .84, 1.16), .55*tn);
+            on = mix(on, vec3(.98, .8, .42)*(.55 + .25*f), .6*gd);
+            off = off + night*(f - 1.)*.9 + vec3(.1, .07, .02)*gd;  // 光圈外也隐约看得见
+          }
+          cs = mix(off, on, lit);                                  // 光圈外：地面几乎和页面一样，东西留一点点轮廓
           if(flr && lit < .01) cs = horizon(ro, rd, length(wp - ro), cs, bay);   // 远处地面上也能立起山脚
         }
         float g = 1. - exp(-beam(ro, rd, bg ? 40. : length(wp - ro))*.38);
@@ -253,6 +299,7 @@ sun.shadow.bias = -0.0015; sun.shadow.normalBias = 0.02;
 
 // ---------- 地面：白底 + 灰网格（线切成短段，转到哪个角度都不会穿过近裁面出错） ----------
 const FLOOR_Y = -0.95;
+let FLOOR_GRID = null;                 // 聚光灯打开时网格淡出，让位给地板花纹
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({color:0xffffff, polygonOffset:true, polygonOffsetFactor:2, polygonOffsetUnits:2}));
 floor.rotation.x = -Math.PI/2; floor.position.y = FLOOR_Y; scene.add(floor);
 {
@@ -268,7 +315,7 @@ floor.rotation.x = -Math.PI/2; floor.position.y = FLOOR_Y; scene.add(floor);
   for(let i=-EXT;i<=EXT;i++){ const col = i%5===0 ? cMajor : cMinor; addLine(true, i*GS, col); addLine(false, i*GS, col); }
   const gg = new THREE.BufferGeometry();
   gg.setAttribute('position', new THREE.Float32BufferAttribute(pv,3)); gg.setAttribute('color', new THREE.Float32BufferAttribute(pc,3));
-  const grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({vertexColors:true}));
+  const grid = FLOOR_GRID = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({vertexColors:true, transparent:true}));
   grid.position.y = FLOOR_Y + 0.01; grid.material.depthWrite = false; grid.renderOrder = 1; scene.add(grid);
 }
 const shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({color:0x2a2440, opacity:0.22, depthWrite:false}));
@@ -307,7 +354,7 @@ function updateSpot(dt){
   const tgt = SPOT.on ? 1 : 0;
   SPOT.k += Math.sign(tgt - SPOT.k)*Math.min(Math.abs(tgt - SPOT.k), dt*1.7);   // 约 0.6 秒淡入淡出
   const k = SPOT.k*SPOT.k*(3 - 2*SPOT.k);
-  post.uniforms.uSpot.value = k;
+  post.uniforms.uSpot.value = k; FLOOR_GRID.material.opacity = 1 - k; FLOOR_GRID.visible = k < 0.999;
   // 场景本身的背景保持白色：半透明的果冻透出来的还是亮底，鱿鱼在光里不发灰；真正的背景像素在后处理里换成夜空色
   FANS.pts.visible = k > 0.5;
   if(!FANS.pts.visible) return;
@@ -981,21 +1028,27 @@ const capeClasp = new THREE.Group(); capeClasp.scale.setScalar(1.3); scene.add(c
 { // 领口金边跟着身体
   const collar = new THREE.Mesh(new THREE.TorusGeometry(CAPE_RC + 0.004, 0.024, 6, 36), hoopMat);
   collar.rotation.x = Math.PI/2; collar.position.y = CAPE_YC + 0.004; body.add(collar);
-  // 小高领：从领口往上立起一圈星空料子，往外微微翻开，正前方留一道 V 形开口；上沿和开口两边镶金边
-  const HG = 0.42, HC = 0.13, HR0 = CAPE_RC + 0.012, HR1 = CAPE_RC + 0.05, HN = 28, hv = [], huv = [], hix = [];
-  for(let j=0; j<=2; j++) for(let i=0; i<=HN; i++){
-    const v = j/2, g = HG*(1 - 0.45*v), a = g + (2*Math.PI - 2*g)*i/HN, r = HR0 + (HR1 - HR0)*v*v;   // 越往上开口越大、越往外翻
-    hv.push(Math.cos(a)*r, CAPE_YC + HC*v, Math.sin(a)*r); huv.push(a/(2*Math.PI), 0.62 + 0.22*v);
-  }
-  for(let j=0; j<2; j++) for(let i=0; i<HN; i++){ const a = j*(HN + 1) + i, b = a + 1, c = a + HN + 1, d = c + 1; hix.push(a, c, b, b, c, d); }
+  // 小高领：从领口立起一圈星空料子，越往上越往外翻（像喇叭口，翻出去的上沿离开眼睛），正前方留开口；
+  // 开口两边的上角削成圆弧，不留尖角；金边从一边开口底下沿圆角绕上沿一整圈再下到另一边
+  const HG = 0.4, HC = 0.15, HR0 = CAPE_RC + 0.012, HR1 = CAPE_RC + 0.17, HN = 40, HV = 4, hv = [], huv = [];
+  const hPt = (i, v, out = 0)=>{
+    const g = HG*(1 + 0.25*v), a = g + (2*Math.PI - 2*g)*i/HN, da = Math.min(a - g, 2*Math.PI - g - a);
+    const hf = 0.45 + 0.55*Math.sin(Math.min(1, da/0.45)*Math.PI/2);                   // 开口处矮一些，圆圆地升上去
+    const r = HR0 + (HR1 - HR0)*Math.pow(v, 1.6) + out;
+    return [Math.cos(a)*r, CAPE_YC + HC*v*hf, Math.sin(a)*r];
+  };
+  for(let j=0; j<=HV; j++) for(let i=0; i<=HN; i++){ const v = j/HV; hv.push(...hPt(i, v)); huv.push(i/HN, 0.62 + 0.22*v); }
+  const hix = [];
+  for(let j=0; j<HV; j++) for(let i=0; i<HN; i++){ const a = j*(HN + 1) + i, b = a + 1, c = a + HN + 1, d = c + 1; hix.push(a, c, b, b, c, d); }
   const hg = new THREE.BufferGeometry();
   hg.setAttribute('position', new THREE.Float32BufferAttribute(hv, 3)); hg.setAttribute('uv', new THREE.Float32BufferAttribute(huv, 2)); hg.setIndex(hix); hg.computeVertexNormals();
   body.add(new THREE.Mesh(hg, toon(0xffffff, {map:capeTex, side:THREE.FrontSide})), new THREE.Mesh(hg, capeLining));
-  const edge = (pts)=>{ const c = new THREE.CatmullRomCurve3(pts.map(p=>new V3(...p))); body.add(new THREE.Mesh(new THREE.TubeGeometry(c, pts.length*4, 0.011, 5, false), hoopMat)); };
-  const top = [], gT = HG*0.55;
-  for(let i=0; i<=HN; i++){ const a = gT + (2*Math.PI - 2*gT)*i/HN; top.push([Math.cos(a)*(HR1 + 0.004), CAPE_YC + HC, Math.sin(a)*(HR1 + 0.004)]); }
-  edge(top);
-  for(const sgn of [1, -1]) edge([0, 0.5, 1].map(v=>{ const g = sgn*HG*(1 - 0.45*v), r = HR0 + (HR1 - HR0)*v*v + 0.004; return [Math.cos(g)*r, CAPE_YC + HC*v, Math.sin(g)*r]; }));
+  const rim = [];
+  for(let j=0; j<HV; j++) rim.push(hPt(0, j/HV, 0.004));
+  for(let i=0; i<=HN; i++) rim.push(hPt(i, 1, 0.004));
+  for(let j=HV - 1; j>=0; j--) rim.push(hPt(HN, j/HV, 0.004));
+  const rc = new THREE.CatmullRomCurve3(rim.map(p=>new V3(...p)));
+  body.add(new THREE.Mesh(new THREE.TubeGeometry(rc, 160, 0.011, 5, false), hoopMat));
   capeClasp.add(new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.016, 4, 4), hoopMat));                 // 菱形金托
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.058, 0), toon(0x9a63f2)); gem.scale.set(0.82, 1, 0.5); capeClasp.add(gem);   // 八面体自带分面法线，本来就是切面宝石；卡通材质不认 flatShading，写了只会在控制台报警告
 }
