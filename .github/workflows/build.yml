@@ -43,6 +43,8 @@ jobs:
       - run: npm run prepare-web
       # 没有 Apple 开发者证书：只做临时签名（identity "-"），Apple 芯片的 Mac 才能打开；第一次打开要在"隐私与安全性"里点"仍要打开"
       - run: npx electron-builder --mac --arm64 --x64 --publish never
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'   # PR 里默认不签名；临时签名不用任何密钥，照样签
       - name: Check signature
         run: |
           for a in dist/mac*/Squiddle.app; do echo "$a"; codesign --verify --deep --strict "$a" && codesign -dv "$a" 2>&1 | grep -E 'Signature|Identifier|Format'; done
