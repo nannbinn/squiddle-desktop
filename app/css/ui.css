@@ -25,7 +25,7 @@ button{font:inherit;color:inherit}
 ::selection{background:var(--pink-d);color:#fff}
 svg.px{shape-rendering:crispEdges;fill:currentColor;flex:none}
 
-.win{position:relative;height:100vh;display:flex;flex-direction:column;background:var(--night);overflow:hidden}
+.win{position:relative;height:100vh;display:flex;flex-direction:column;background:var(--night);overflow:hidden;overflow:clip}   /* clip：收起的菜单挂在右边外面，Safari/WebKit 里 hidden 仍可被滚动，整页会往左偏 */
 
 /* ---------- 标题栏：可以拖动窗口，双击最大化 ---------- */
 .tb{flex:none;height:var(--tb);display:flex;align-items:center;gap:14px;padding-left:14px;user-select:none;position:relative;z-index:6;-webkit-app-region:drag}
@@ -61,7 +61,7 @@ svg.px{shape-rendering:crispEdges;fill:currentColor;flex:none}
 /* ---------- 舞台：四周留 8px，像一块屏幕；画面按区域宽高比渲染，铺满 ---------- */
 .body{flex:1;min-height:0;display:flex;padding:0 var(--g)}
 .win.full .body{padding:0}
-.stagewrap{position:relative;flex:1;min-width:0}
+.stagewrap{position:relative;flex:1;min-width:0;overflow-x:clip}
 .stage{position:absolute;inset:0;background:var(--stage-night);overflow:hidden;border:2px solid var(--line);clip-path:var(--nt)}
 .win.full .stage{border:0;clip-path:none}
 .screen{position:absolute;inset:0}
