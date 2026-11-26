@@ -291,6 +291,13 @@ function setCap(i){
 segBtns.forEach((b, i) => b.onclick = () => setCap(i));
 setCap(Math.max(0, Math.min(2, set0.cap | 0)));
 $('#resetView').onclick = () => S.resetView();
+// 导演模式和聚光灯也记住，下次打开照旧
+if(set0.director) S.setDirector(true);
+if(set0.spot) S.setSpot(true);
+S.on('state', st => {
+  if(!!set0.director === st.director && !!set0.spot === st.spot) return;
+  set0.director = st.director; set0.spot = st.spot; store.set('settings', set0);
+});
 
 /* ---------- 画布工具：按设备像素画，1 颗粒子 = 1 个 CSS 像素 ---------- */
 const DPR = () => Math.max(1, Math.round(window.devicePixelRatio || 1));
