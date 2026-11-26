@@ -4,10 +4,14 @@ const path = require('path');
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');   // 打开就能出声，不用先点一下
 
+const isMac = process.platform === 'darwin';
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280, height: 900, minWidth: 760, minHeight: 600,
-    frame: false, backgroundColor: '#1f2263', title: 'Squiddle 星空鼓手', show: false,
+    // Windows：无边框，标题栏按钮是页面自己画的；macOS：保留系统的红黄绿三个按钮，嵌在页面标题栏左边
+    ...(isMac ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 14, y: 12 } } : { frame: false }),
+    backgroundColor: '#1f2263', title: 'Squiddle 星空鼓手', show: false,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -19,7 +23,8 @@ function createWindow() {
   win.webContents.on('before-input-event', (e, i) => {
     if (i.type !== 'keyDown') return;
     if (i.key === 'Escape' && win.isFullScreen()) win.setFullScreen(false);
-    if (i.key === 'F12' || (i.control && i.shift && i.key.toLowerCase() === 'i')) { win.webContents.toggleDevTools(); e.preventDefault(); }
+    const k = i.key.toLowerCase();
+    if (i.key === 'F12' || (i.control && i.shift && k === 'i') || (i.meta && i.alt && k === 'i')) { win.webContents.toggleDevTools(); e.preventDefault(); }
   });
   // 窗口状态告诉页面：标题栏的最大化按钮要换图标，全屏时标题栏收起
   const send = () => win.webContents.send('win-state', { max: win.isMaximized(), full: win.isFullScreen() });
@@ -41,7 +46,8 @@ ipcMain.on('win', (e, cmd) => {
 app.whenReady().then(() => {
   // 只放行本地文件和页面自己生成的 data:/blob: 地址
   session.defaultSession.webRequest.onBeforeRequest((d, cb) => cb({ cancel: !/^(file|data|blob|devtools|chrome-extension):/.test(d.url) }));
-  Menu.setApplicationMenu(null);     // 没有系统菜单栏，快捷键都在页面里
+  // Windows 没有菜单栏，快捷键都在页面里；macOS 顶部总有菜单栏，给一个最小的，Cmd+Q/W/M/H、复制粘贴、全屏才好用
+  Menu.setApplicationMenu(isMac ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null);
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

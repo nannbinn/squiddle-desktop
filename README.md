@@ -1,6 +1,6 @@
 # Squiddle 星空鼓手（桌面版）
 
-像素风鱿鱼用触手打架子鼓。Electron 打包成 Windows 10/11 64 位程序。
+像素风鱿鱼用触手打架子鼓。Electron 打包成 Windows 10/11 64 位程序和 macOS 程序（Apple 芯片 / Intel 各一个 .dmg）。
 
 ## 开发
 
@@ -26,7 +26,8 @@ xvfb-run -a -s "-screen 0 1400x1000x24" node scripts/smoke.js out/smoke   # 冒�
 - `npm run dist`：安装版 `Squiddle-Setup-<版本>.exe` + 免安装版 `Squiddle-<版本>-portable.exe`（需在 Windows 上，或 Linux 装 32 位 wine）
 - `npm run dist:zip`：解压即用的 `Squiddle-<版本>-win-x64.zip`（Linux 上也能打）
 - `npm run build-web`：网页单文件 `dist/Squiddle-web.html`，脚本、样式、字体全部内嵌，双击用浏览器打开就能玩（先跑一次 `prepare-web`）
-- 推送到 GitHub 后，Actions 在 Windows 机器上自动打包；打 `v*` 标签会发布到 Releases。
+- `npm run dist:mac`：macOS 的 `Squiddle-<版本>-mac-arm64.dmg` / `-mac-x64.dmg`（需在 Mac 上）。没有 Apple 开发者证书，只做临时签名：第一次打开会被拦，到「系统设置 → 隐私与安全性」点「仍要打开」，或在终端执行 `xattr -dr com.apple.quarantine /Applications/Squiddle.app`
+- 推送到 GitHub 后，Actions 在 Windows 和 macOS 机器上自动打包；打 `v*` 标签会发布到 Releases。
 
 ## 第三方
 

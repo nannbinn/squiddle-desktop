@@ -1,4 +1,4 @@
-# 在 GitHub 的 Windows 机器上打包：每次推送出一个可下载的构建，打 v* 标签时发到 Releases
+# 在 GitHub 的 Windows / macOS 机器上打包：每次推送出可下载的构建，打 v* 标签时发到 Releases
 name: build
 on:
   push:
@@ -31,3 +31,31 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prepare-web
+      # 没有 Apple 开发者证书：只做临时签名（identity "-"），Apple 芯片的 Mac 才能打开；第一次打开要在"隐私与安全性"里点"仍要打开"
+      - run: npx electron-builder --mac --arm64 --x64 --publish never
+      - name: Check signature
+        run: |
+          for a in dist/mac*/Squiddle.app; do echo "$a"; codesign --verify --deep --strict "$a" && codesign -dv "$a" 2>&1 | grep -E 'Signature|Identifier|Format'; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Squiddle-macos
+          path: |
+            dist/*.dmg
+          if-no-files-found: error
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*-mac-*.zip

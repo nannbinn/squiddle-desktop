@@ -61,7 +61,10 @@ const vuBars = [...document.querySelectorAll('#vu i')];
 const lv = new Float32Array(8);
 const LVI = {kick:0, floor:1, tom2:2, tom1:3, snare:4, hihat:6, crash:7};
 function drawMeter(){ for(let i=0; i<8; i++) vuBars[i].style.setProperty('--v', (Math.min(4, Math.round(lv[i]*4))*25) + '%'); }
-if(desk && desk.win){
+if(desk && desk.platform === 'darwin'){                // macOS 用系统自带的红黄绿按钮（嵌在标题栏左边），页面只让出位置
+  win.classList.add('mac');
+  desk.win.onState(st => win.classList.toggle('full', st.full));
+} else if(desk && desk.win){
   $('#wbtns').hidden = false;
   $('#wMin').onclick = () => desk.win.min();
   $('#wMax').onclick = () => desk.win.max();

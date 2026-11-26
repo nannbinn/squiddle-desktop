@@ -49,6 +49,8 @@ svg.px{shape-rendering:crispEdges;fill:currentColor;flex:none}
 .vu i::after{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--v,0%);background:linear-gradient(0deg,var(--plum),var(--pink) 60%,var(--pale))}
 .tb .sp{flex:1}
 .wbtns{display:flex;height:100%;-webkit-app-region:no-drag}
+.win.mac .tb{padding-left:84px}                 /* 给 macOS 的三个窗口按钮留位置 */
+.win.mac.full .tb{padding-left:14px}
 .wbtns button{appearance:none;border:0;background:transparent;width:46px;height:100%;cursor:pointer;color:var(--mist);display:grid;place-items:center;transition:background .12s,color .12s}
 .wbtns button:hover{background:var(--panel2);color:var(--fg)}
 .wbtns .x:hover{background:#b8506f;color:#fff}
