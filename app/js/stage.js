@@ -831,7 +831,7 @@ body.position.copy(bodyBase);
 const ringPoint = (ang, out) => out.set(Math.cos(ang)*RING_R, RING_Y, Math.sin(ang)*RING_R);
 const squidRing = new V3(bodyBase.x, bodyBase.y + RING_Y, bodyBase.z);
 // 头底一圈的十个位置：前方四个给打鼓的触手，其余六条腕待机
-const SLOT = {L:-0.314, R:0.314, K:-0.942, F:0.942};
+const SLOT = {L:-0.942, R:-0.314, K:0.314, F:0.942};   // 按目标从右到左排：踩镲/吊镲、军鼓/嗵、底鼓、落地嗵，触手根部互不交叉
 const IDLE_SLOTS = [1.571, -1.571, 2.199, -2.199, 2.827, -2.827];
 
 const sphereGeo = new THREE.SphereGeometry(1, 8, 6), ringGeo = new THREE.TorusGeometry(1, 0.42, 4, 8);
@@ -1217,8 +1217,8 @@ function makeCymbal(o){
 }
 
 // 鼓组摆放：鱿鱼在后方正中，脸朝 +z；它的左手边是 +x
-makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.4,-0.05],   normal:[0,0,-1],        R:0.52, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
-makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.5,0.0,-0.3],   normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
+makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.46,-0.05],  normal:[0,0,-1],        R:0.46, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
+makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.72,0.08,-0.3],  normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
 makeDrum({key:'tom1',  label:'高嗵',   kind:'tom',   pos:[0.31,0.62,0.3],  normal:[-0.12,1,-0.5],  R:0.27, depth:0.3,  f0:172, tau:0.55, gain:0.9});
 makeDrum({key:'tom2',  label:'中嗵',   kind:'tom',   pos:[-0.33,0.62,0.3], normal:[0.12,1,-0.5],   R:0.3,  depth:0.32, f0:138, tau:0.6,  gain:0.95});
 makeDrum({key:'floor', label:'落地嗵', kind:'tom',   pos:[-0.85,-0.02,-0.35], normal:[0,1,0],      R:0.4,  depth:0.62, f0:98,  tau:0.75, gain:1.0});
@@ -1243,8 +1243,8 @@ function tripod(x, z, top, spread, a0, hCol){
   const F = (x,z)=>new V3(x, FLOOR_Y, z);
   const sn = INST.snare;
   // 军鼓架：三脚架 + 顶上三爪托架托住鼓底
-  const snTop = new V3(0.5, -sn.depth - 0.06, -0.3);
-  tripod(0.5, -0.3, snTop, 0.3, -0.35, 0.3);
+  const snTop = new V3(0.72, 0.08 - sn.depth - 0.06, -0.3);
+  tripod(0.72, -0.3, snTop, 0.3, -0.35, 0.3);
   for(let i=0;i<3;i++){
     const a = -0.35 + i*2*Math.PI/3, rim = sn.g.localToWorld(new V3(Math.cos(a)*sn.R*0.85, -sn.depth - 0.02, Math.sin(a)*sn.R*0.85));
     rod(snTop, rim, 0.012);
@@ -1270,7 +1270,7 @@ function tripod(x, z, top, spread, a0, hCol){
   // 落地嗵三条腿、嗵鼓支架、底鼓支脚
   for(let i=0;i<3;i++){ const a = i/3*Math.PI*2 + 0.5, f = F(-0.85+Math.cos(a)*0.5, -0.35+Math.sin(a)*0.5); rod(f, new V3(-0.85+Math.cos(a)*0.43, -0.25, -0.35+Math.sin(a)*0.43), 0.02); rubberFoot(f); }
   for(const t of [INST.tom1, INST.tom2]){ const b = t.center.clone().addScaledVector(t.n, -t.depth); rod(new V3(b.x*0.5, 0.1, 0.22), b, 0.022); }
-  for(const sg of [-1,1]){ const f = F(sg*0.42, -0.25); rod(f, new V3(sg*0.38, -0.65, -0.05), 0.02); rubberFoot(f); }
+  for(const sg of [-1,1]){ const f = F(sg*0.38, -0.25); rod(f, new V3(sg*0.34, -0.68, -0.05), 0.02); rubberFoot(f); }
 }
 
 // ---------- 复古音箱组：鱿鱼身后左右各一套（箱头 + 一只 4×12 + 下面一只单喇叭大低音箱），标志是原创的 ----------
@@ -1367,7 +1367,7 @@ makeStack(-2.3, -2.3, 0.38);
 const cableMat = toon(0x231e2c), ferriteMat = toon(0x6e6880);
 function addTrigger(I, hint){
   let best = 0, bd = 1e9; const v = new V3();
-  for(let i=0;i<36;i++){ const a = i/36*Math.PI*2; I.g.localToWorld(v.set(Math.cos(a)*I.R*1.1, -0.04, Math.sin(a)*I.R*1.1)); const d = v.distanceTo(hint); if(d < bd){ bd = d; best = a; } }
+  for(let i=0;i<36;i++){ const a = i/36*Math.PI*2; I.g.localToWorld(v.set(Math.cos(a)*I.R*1.1, -0.04, Math.sin(a)*I.R*1.1)); if(v.y < FLOOR_Y + 0.2) continue; const d = v.distanceTo(hint); if(d < bd){ bd = d; best = a; } }   // 触发器别夹到贴地的位置
   const ca = Math.cos(best), sa = Math.sin(best), rr = I.R*1.03 + 0.06, out = new V3(ca, 0, sa);
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.09), footMat); box.position.set(ca*rr, -0.045, sa*rr); box.rotation.y = -best; I.g.add(box);
   const jk = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.06, 6), standMat); jk.position.set(ca*(rr + 0.05), -0.045, sa*(rr + 0.05)); jk.quaternion.setFromUnitVectors(UPV, out); I.g.add(jk);
@@ -1384,7 +1384,10 @@ function ampJack(A, k){                                  // 箱头面板左端�
   return {jx, jy, jz, local:(x, y, z)=>A.sh.localToWorld(new V3(x, y, z))};
 }
 function addCable(pts, r){
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  // 样条在电线从鼓上垂到地面的拐弯处会往下冲出一点，钻到地板下面：先密采样，把低于地面的点抬回地面，再用这些点画
+  const raw = new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(240), fy = FLOOR_Y + r + 0.004;
+  for(const p of raw) if(p.y < fy) p.y = fy;
+  const curve = new THREE.CatmullRomCurve3(raw, false, 'centripetal');
   scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 160, r, 5, false), cableMat));
   for(const t of [0.04, 0.965]){
     const p = curve.getPointAt(t), tg = curve.getTangentAt(t);
@@ -1747,6 +1750,49 @@ function collideLimb(L){
     L.pts[k].copy(_CQ[j-1]).lerp(_CQ[j], Math.min(1, Math.max(0, f)));
   }
 }
+// 相邻的打鼓触手之间不互相穿：找出挨得太近的地方，各让一半。推开量用钟形权重沿触手前后十来节摊开（不折角），
+// 再随时间平滑跟过去（不抖）；根部 15% 不参与
+const SEP_A = Array.from({length:64}, ()=>new V3()), SEP_B = Array.from({length:64}, ()=>new V3()), SEP_T = Array.from({length:64}, ()=>new V3()), _sq = new V3();
+const SEP_W = Array.from({length:11}, (_,i)=>0.5 + 0.5*Math.cos(Math.PI*i/11));
+function sepApply(L, D){
+  const N = L.NS;
+  if(!L.sepAcc) L.sepAcc = Array.from({length:N}, ()=>new V3());
+  for(let k=0;k<N;k++){
+    let best = 0; SEP_T[k].set(0,0,0);
+    for(let j=Math.max(0, k-10); j<=Math.min(N-1, k+10); j++){
+      const w = SEP_W[Math.abs(k-j)], m = D[j].length()*w;
+      if(m > best){ best = m; SEP_T[k].copy(D[j]).multiplyScalar(w); }
+    }
+    const g = Math.min(1, Math.max(0, (L.sampF[k] - 0.12)/0.1));
+    SEP_T[k].multiplyScalar(g);
+    L.sepAcc[k].add(SEP_T[k]);
+  }
+}
+function separateLimbs(dt){
+  for(const L of limbs){ if(!L.sepD){ L.sepD = Array.from({length:L.NS}, ()=>new V3()); L.sepAcc = Array.from({length:L.NS}, ()=>new V3()); } for(const v of L.sepAcc) v.set(0,0,0); }
+  const kd = 1 - Math.exp(-dt*60);
+  for(const [a, b] of SEP_PAIRS) separatePair(limbs[a], limbs[b], kd);
+  for(const L of limbs) if(L.sepAcc){ for(let k=0;k<L.NS;k++){ L.sepD[k].lerp(L.sepAcc[k], kd); L.pts[k].add(L.sepD[k]); } }
+}
+const SEP_PAIRS = [[0, 1], [1, 2]];      // 相邻的根：踩镲触手–军鼓触手、军鼓触手–底鼓触手
+function separatePair(A, B, kd){
+  for(let k=0;k<A.NS;k++) SEP_A[k].set(0,0,0);
+  for(let j=0;j<B.NS;j++) SEP_B[j].set(0,0,0);
+  for(let k=0;k<A.NS;k++){
+    if(A.sampF[k] < 0.15) continue;
+    const pa = profile(A, A.sampF[k]), ra = pa.r*pa.t;
+    for(let j=0;j<B.NS;j++){
+      if(B.sampF[j] < 0.15) continue;
+      const pb = profile(B, B.sampF[j]), need = ra + pb.r*pb.t + 0.02;
+      _sq.subVectors(A.pts[k], B.pts[j]); const d = _sq.length();
+      if(d >= need || d < 1e-6) continue;
+      _sq.multiplyScalar((need - d)/d*0.6);
+      if(_sq.lengthSq() > SEP_A[k].lengthSq()) SEP_A[k].copy(_sq);
+      if(_sq.lengthSq() > SEP_B[j].lengthSq()) SEP_B[j].copy(_sq).negate();
+    }
+  }
+  sepApply(A, SEP_A); sepApply(B, SEP_B);
+}
 function drawLimb(L){
   let si = 0, rw = 0, rt = 0;
   computeFrames(L);
@@ -1790,7 +1836,7 @@ const TRACKS = {
 const TENT = {lens:[0.6,0.52,0.45,0.4], LC:0.24, per:[11,9,8,13], perc:8, club:true, curlK:4.6, hc:0.19, thick:0.05, amp:0.85};
 const ARMO = {lens:[0.55,0.45,0.42,0.35], LC:0.14, per:[10,8,7,9], perc:6, club:false, curlK:7, hc:0.165, thick:0.03, amp:0.7};
 // 打底鼓的腕：加长一些，根部往下走，贴着地面绕到鼓皮下半部，末段从下往上拍（不再从头顶直插下来、路过军鼓）
-const KICKO = Object.assign({}, ARMO, {lens:[0.95,0.75,0.55,0.35], per:[16,13,10,9], approach:new V3(0, 1, 0), dropY:1.4, planar:0.04, qmax:[2.0, 2.0, 3.0, 0.9]});   // 第三段允许弯得更狠：J 形的底
+const KICKO = Object.assign({}, ARMO, {lens:[0.8,0.65,0.5,0.35], per:[14,12,9,9], approach:new V3(0, 1, 0), dropY:1.4, planar:0.04, qmax:[2.0, 2.0, 3.0, 0.9]});   // 第三段允许弯得更狠：J 形的底
 makeLimb(Object.assign({key:'L', ang:SLOT.L, track:TRACKS.L}, TENT));
 makeLimb(Object.assign({key:'R', ang:SLOT.R, track:TRACKS.R}, TENT));
 makeLimb(Object.assign({key:'K', ang:SLOT.K, track:TRACKS.K}, KICKO));
@@ -1926,6 +1972,8 @@ for(const L of limbs){
   L.aim.multiplyScalar(1/na);
   L.rest = false; L.iter = 0; L.nextHit.tAbs = 0;
   scheduleNext(L, 'now');
+  const s0 = L.track.find(s=>s), I0 = INST[s0.i];          // 还没排到活的触手（比如落地嗵那条）先悬在自己那件鼓上，别停在原点（底鼓上方）
+  if(!L.nextHit.inst){ hitSpot(I0, s0.r, s0.a, L.nextHit.p); L.nextHit.n.copy(I0.n); }
   L.lastHit.p.copy(L.nextHit.p); L.lastHit.n.copy(L.nextHit.n); L.lastHit.t = -0.6;
 }
 
@@ -2133,7 +2181,7 @@ let camLabel = '用户透视';
 const INAME = {kick:'底鼓', snare:'军鼓', hihat:'踩镲', tom1:'高嗵', tom2:'中嗵', floor:'落地嗵', crash:'吊镲'};
 // 每件乐器一个不被别的东西挡住的机位：看向点 xyz、方位角、俯仰角、距离、视角
 const ISHOT = {
-  kick:[0.05,-0.45,-0.3, 2.5,1.35,2.6,34], snare:[0.5,0.05,-0.35, 0.55,0.95,2.3,30], hihat:[1.1,0.35,-0.55, 1.15,1.0,2.3,30],
+  kick:[0.05,-0.45,-0.3, 2.5,1.35,2.6,34], snare:[0.68,0.12,-0.35, 0.6,0.95,2.3,30], hihat:[1.1,0.35,-0.55, 1.15,1.0,2.3,30],
   tom1:[0.25,0.65,0.2, 0.2,1.05,2.3,30], tom2:[-0.25,0.65,0.2, -0.2,1.05,2.3,30], floor:[-0.85,0.05,-0.35, -0.95,1.0,2.3,30], crash:[0.9,1.15,0.1, 0.45,0.85,2.5,32]};
 const pm1 = () => Math.random() < 0.5 ? -1 : 1, rnd = (a, b) => a + Math.random()*(b - a);
 const SHOTS = {
@@ -2145,9 +2193,26 @@ const SHOTS = {
   inst: k=>{ const q = ISHOT[k]; return {label:'特写 · ' + INAME[k], key:k, tg:new V3(q[0], q[1], q[2]), th:q[3] + rnd(-0.12, 0.12), dth:0.1*pm1(), ph:q[4], r:q[5], dr:-0.25, fov:q[6]}; },
 };
 const SHOT_W = [['inst', 3.2], ['wide', 2], ['face', 1.6], ['low', 1], ['back', 1], ['top', 0.8]];
-const DIR = {on:false, w:0, shot:null, kind:'', t:0, len:4, cutReq:false, pose:{pos:new V3(), look:new V3(), fov:FOV0}, cur:{pos:new V3(), look:new V3(), fov:FOV0}};
+const DIR = {on:false, w:0, shot:null, kind:'', t:0, len:4, cutReq:false, from:null, tt:0, pose:{pos:new V3(), look:new V3(), fov:FOV0}, cur:{pos:new V3(), look:new V3(), fov:FOV0}};
+// 乐器特写拍哪件：看接下来这个镜头的时长里每件乐器要打几下，按次数抽（底鼓、踩镲太常响，打折扣），一下都不打的不拍
+const INST_W = {kick:0.3, hihat:0.4, snare:1, tom1:1.4, tom2:1.4, floor:1.4, crash:1.6};
+function pickInst(len){
+  if(SONG.T < 0 || !SONG.events.length) return null;
+  const t0 = songLocal(SONG.T), t1 = t0 + len*SONG.rate, w = {};
+  for(const e of SONG.events){
+    if(e.drop) continue;
+    const t = e.t < t0 && SONG.loop ? e.t + SONG.dur : e.t;
+    if(t >= t0 + 0.3 && t < t1) w[e.i] = (w[e.i] || 0) + 1;
+  }
+  const prev = DIR.shot && DIR.shot.key; let tot = 0;
+  for(const k in w){ w[k] = ISHOT[k] && k !== prev ? Math.min(6, w[k])*(INST_W[k] || 1) : 0; tot += w[k]; }
+  if(tot <= 0) return null;
+  let x = Math.random()*tot;
+  for(const k in w){ x -= w[k]; if(x <= 0 && w[k] > 0) return k; }
+  return null;
+}
 function pickShot(force){
-  let kind = force;
+  let kind = force; DIR.len = rnd(5, 8.5);
   if(!kind){
     const opts = SHOT_W.filter(o=>o[0] !== DIR.kind || o[0] === 'inst');
     let x = opts.reduce((a, o)=>a + o[1], 0)*Math.random();
@@ -2156,11 +2221,14 @@ function pickShot(force){
   }
   let shot;
   if(kind === 'inst'){
-    const nh = attention(), ks = Object.keys(ISHOT); let k = nh && nh.inst ? nh.inst.key : null;   // 优先拍马上要打的那件
-    if(!k || !ISHOT[k] || (DIR.shot && DIR.shot.key === k)) k = ks[Math.floor(Math.random()*ks.length)];
-    shot = SHOTS.inst(k);
+    const k = pickInst(DIR.len);
+    if(!k){ kind = 'wide'; shot = SHOTS.wide(); }
+    else shot = SHOTS.inst(k);
   } else shot = SHOTS[kind]();
-  DIR.shot = shot; DIR.kind = kind; DIR.t = 0; DIR.len = rnd(3.2, 6); DIR.cutReq = false;
+  if(DIR.shot && DIR.w > 0.5){                // 换镜头不硬切：从当前画面平滑运镜过去
+    const C = DIR.cur; DIR.from = {look:C.look.clone(), off:C.pos.clone().sub(C.look), fov:C.fov}; DIR.tt = 0;
+  } else DIR.from = null;
+  DIR.shot = shot; DIR.kind = kind; DIR.t = 0; DIR.cutReq = false;
   if(shot.gaze) CH.gazeReq = 1;              // 脸部特写：她会看过来
 }
 function dirPose(o){
@@ -2169,10 +2237,28 @@ function dirPose(o){
   if(o.pos.y < FLOOR_Y + 0.15) o.pos.y = FLOOR_Y + 0.15;
   o.look.copy(S.tg); o.fov = S.fov; return o;
 }
-function dirHit(I){                          // 到点了就在底鼓、军鼓或吊镲那一下上切；吊镲一响也常常顺手切一刀
+// 运镜：看向点直线过去，机位绕看向点按球坐标走（方位角走近的那边），不会从鱿鱼身体里穿过去
+const CAM_TR = 0.7, _o0 = new V3(), _o1 = new V3();
+function blendShot(o, dt){
+  const F = DIR.from; if(!F) return o;
+  DIR.tt += dt; const u = Math.min(1, DIR.tt/CAM_TR), e = 0.5 - 0.5*Math.cos(Math.PI*u);   // 正弦缓入缓出：最快处不冲，收尾也不拖
+  if(u >= 1){ DIR.from = null; return o; }
+  _o1.subVectors(o.pos, o.look);
+  const r0 = F.off.length(), r1 = _o1.length();
+  const ph0 = Math.acos(Math.max(-1, Math.min(1, F.off.y/r0))), ph1 = Math.acos(Math.max(-1, Math.min(1, _o1.y/r1)));
+  const th0 = Math.atan2(F.off.x, F.off.z); let dth = Math.atan2(_o1.x, _o1.z) - th0;
+  dth = Math.atan2(Math.sin(dth), Math.cos(dth));
+  const r = r0 + (r1 - r0)*e, ph = ph0 + (ph1 - ph0)*e, th = th0 + dth*e, sp = Math.sin(ph);
+  o.look.lerpVectors(F.look, o.look, e);
+  o.pos.set(o.look.x + r*sp*Math.sin(th), o.look.y + r*Math.cos(ph), o.look.z + r*sp*Math.cos(th));
+  if(o.pos.y < FLOOR_Y + 0.15) o.pos.y = FLOOR_Y + 0.15;
+  o.fov = F.fov + (o.fov - F.fov)*e;
+  return o;
+}
+function dirHit(I){                          // 到点了就在底鼓或军鼓那一下上切（吊镲不切，让人看完整个动作）
   if(!DIR.on || DIR.w < 0.5 || !DIR.shot) return;
-  if(DIR.cutReq && (I.key === 'kick' || I.key === 'snare' || I.key === 'crash')) pickShot();
-  else if(I.key === 'crash' && DIR.t > 1.6 && Math.random() < 0.6) pickShot(Math.random() < 0.5 ? 'face' : 'wide');
+  if(DIR.from) return;                       // 还在运镜途中就不再切
+  if(DIR.cutReq && (I.key === 'kick' || I.key === 'snare')) pickShot();
 }
 function setDirector(on){ DIR.on = on; emit('state', state()); }
 // 手动拖动、平移或缩放时，导播把镜头交回给你：按当前画面换算成轨道相机的参数，画面不会跳
@@ -2184,7 +2270,25 @@ function handOff(){
   orbit.r = clampR(dist*Math.tan(C.fov*Math.PI/360)/Math.tan(FOV0*Math.PI/360));
   orbit.ph = clampPh(Math.acos(Math.max(-1, Math.min(1, d.y/dist))));
   orbit.th = Math.atan2(d.x, d.z);
-  DIR.w = 0; DIR.shot = null; setDirector(false);
+  DIR.w = 0; DIR.shot = null; DIR.from = null; CE.init = false; setDirector(false);
+}
+// 整体镜头缓动：导播算出来的机位外面再套一层临界阻尼弹簧，像有分量的摄像机一样跟过去。
+// 运镜收尾时顺着镜头本身的慢漂移接过去，不会一下停住。CAM_EASE 是弹簧的快慢（越大跟得越紧，0 关掉）
+const CAM_EASE = 5, CE = {init:false, p:new V3(), vp:new V3(), l:new V3(), vl:new V3(), f:0, vf:0}, _ce = new V3();
+function springV(x, v, target, w, dt){            // 临界阻尼：x'' = -2w x' - w²(x - target)
+  _ce.subVectors(x, target).multiplyScalar(-w*w).addScaledVector(v, -2*w);
+  v.addScaledVector(_ce, dt); x.addScaledVector(v, dt);
+}
+function camEase(C, dt){
+  if(!CAM_EASE) return;
+  if(!CE.init){ CE.p.copy(C.pos); CE.l.copy(C.look); CE.f = C.fov; CE.vp.set(0,0,0); CE.vl.set(0,0,0); CE.vf = 0; CE.init = true; return; }
+  const w = CAM_EASE, n = Math.max(1, Math.ceil(dt/0.008)), h = dt/n;   // 小步积分，低帧率下也稳
+  for(let i=0;i<n;i++){
+    springV(CE.p, CE.vp, C.pos, w, h); springV(CE.l, CE.vl, C.look, w, h);
+    CE.vf += (-w*w*(CE.f - C.fov) - 2*w*CE.vf)*h; CE.f += CE.vf*h;
+  }
+  if(CE.p.y < FLOOR_Y + 0.15) CE.p.y = FLOOR_Y + 0.15;
+  C.pos.copy(CE.p); C.look.copy(CE.l); C.fov = CE.f;
 }
 function updateCamera(dt){
   orbitPose(UPOSE);
@@ -2197,12 +2301,14 @@ function updateCamera(dt){
     if(DIR.t > DIR.len + 1.2) pickShot();    // 一直没等到重拍也照切
   }
   if(DIR.w > 0 && DIR.shot){
-    dirPose(DIR.pose);
+    blendShot(dirPose(DIR.pose), dt);
     const e = DIR.w*DIR.w*(3 - 2*DIR.w);
     C.pos.lerpVectors(UPOSE.pos, DIR.pose.pos, e); C.look.lerpVectors(UPOSE.look, DIR.pose.look, e); C.fov = UPOSE.fov + (DIR.pose.fov - UPOSE.fov)*e;
+    camEase(C, dt);
   } else {
     C.pos.copy(UPOSE.pos); C.look.copy(UPOSE.look); C.fov = UPOSE.fov;
     if(!want) DIR.shot = null;
+    CE.init = false;
   }
   applyCam(C.pos, C.look, C.fov);
   const lab = DIR.w > 0.5 && DIR.shot ? '导播 · ' + DIR.shot.label : '用户透视';
@@ -2256,6 +2362,9 @@ function frame(now){
     const ts = simT - L.contactT;      // 拍击后的压扁与回弹（阻尼弹簧）
     L.squash = ts < 0.6 ? Math.exp(-ts*9)*Math.cos(ts*30) : 0;
     L.tube.mesh.material.uniforms.flash.value = ts < 0.7 ? Math.exp(-ts*7) : 0;   // 拍中：尖端亮一下
+  }
+  separateLimbs(dt);
+  for(const L of limbs){
     collideLimb(L);
     drawLimb(L);
     checkContact(L, dt);
