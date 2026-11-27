@@ -1965,6 +1965,8 @@ for(const L of limbs){
   L.aim.multiplyScalar(1/na);
   L.rest = false; L.iter = 0; L.nextHit.tAbs = 0;
   scheduleNext(L, 'now');
+  const s0 = L.track.find(s=>s), I0 = INST[s0.i];          // 还没排到活的触手（比如落地嗵那条）先悬在自己那件鼓上，别停在原点（底鼓上方）
+  if(!L.nextHit.inst){ hitSpot(I0, s0.r, s0.a, L.nextHit.p); L.nextHit.n.copy(I0.n); }
   L.lastHit.p.copy(L.nextHit.p); L.lastHit.n.copy(L.nextHit.n); L.lastHit.t = -0.6;
 }
 
@@ -2185,8 +2187,25 @@ const SHOTS = {
 };
 const SHOT_W = [['inst', 3.2], ['wide', 2], ['face', 1.6], ['low', 1], ['back', 1], ['top', 0.8]];
 const DIR = {on:false, w:0, shot:null, kind:'', t:0, len:4, cutReq:false, from:null, tt:0, pose:{pos:new V3(), look:new V3(), fov:FOV0}, cur:{pos:new V3(), look:new V3(), fov:FOV0}};
+// 乐器特写拍哪件：看接下来这个镜头的时长里每件乐器要打几下，按次数抽（底鼓、踩镲太常响，打折扣），一下都不打的不拍
+const INST_W = {kick:0.3, hihat:0.4, snare:1, tom1:1.4, tom2:1.4, floor:1.4, crash:1.6};
+function pickInst(len){
+  if(SONG.T < 0 || !SONG.events.length) return null;
+  const t0 = songLocal(SONG.T), t1 = t0 + len*SONG.rate, w = {};
+  for(const e of SONG.events){
+    if(e.drop) continue;
+    const t = e.t < t0 && SONG.loop ? e.t + SONG.dur : e.t;
+    if(t >= t0 + 0.3 && t < t1) w[e.i] = (w[e.i] || 0) + 1;
+  }
+  const prev = DIR.shot && DIR.shot.key; let tot = 0;
+  for(const k in w){ w[k] = ISHOT[k] && k !== prev ? Math.min(6, w[k])*(INST_W[k] || 1) : 0; tot += w[k]; }
+  if(tot <= 0) return null;
+  let x = Math.random()*tot;
+  for(const k in w){ x -= w[k]; if(x <= 0 && w[k] > 0) return k; }
+  return null;
+}
 function pickShot(force){
-  let kind = force;
+  let kind = force; DIR.len = rnd(5, 8.5);
   if(!kind){
     const opts = SHOT_W.filter(o=>o[0] !== DIR.kind || o[0] === 'inst');
     let x = opts.reduce((a, o)=>a + o[1], 0)*Math.random();
@@ -2195,14 +2214,14 @@ function pickShot(force){
   }
   let shot;
   if(kind === 'inst'){
-    const nh = attention(), ks = Object.keys(ISHOT); let k = nh && nh.inst ? nh.inst.key : null;   // 优先拍马上要打的那件
-    if(!k || !ISHOT[k] || (DIR.shot && DIR.shot.key === k)) k = ks[Math.floor(Math.random()*ks.length)];
-    shot = SHOTS.inst(k);
+    const k = pickInst(DIR.len);
+    if(!k){ kind = 'wide'; shot = SHOTS.wide(); }
+    else shot = SHOTS.inst(k);
   } else shot = SHOTS[kind]();
   if(DIR.shot && DIR.w > 0.5){                // 换镜头不硬切：从当前画面平滑运镜过去
     const C = DIR.cur; DIR.from = {look:C.look.clone(), off:C.pos.clone().sub(C.look), fov:C.fov}; DIR.tt = 0;
   } else DIR.from = null;
-  DIR.shot = shot; DIR.kind = kind; DIR.t = 0; DIR.len = rnd(3.2, 6); DIR.cutReq = false;
+  DIR.shot = shot; DIR.kind = kind; DIR.t = 0; DIR.cutReq = false;
   if(shot.gaze) CH.gazeReq = 1;              // 脸部特写：她会看过来
 }
 function dirPose(o){
@@ -2215,7 +2234,7 @@ function dirPose(o){
 const CAM_TR = 0.7, _o0 = new V3(), _o1 = new V3();
 function blendShot(o, dt){
   const F = DIR.from; if(!F) return o;
-  DIR.tt += dt; const u = Math.min(1, DIR.tt/CAM_TR), e = u*u*u*(u*(u*6 - 15) + 10);
+  DIR.tt += dt; const u = Math.min(1, DIR.tt/CAM_TR), e = 0.5 - 0.5*Math.cos(Math.PI*u);   // 正弦缓入缓出：最快处不冲，收尾也不拖
   if(u >= 1){ DIR.from = null; return o; }
   _o1.subVectors(o.pos, o.look);
   const r0 = F.off.length(), r1 = _o1.length();
