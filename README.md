@@ -27,7 +27,7 @@ xvfb-run -a -s "-screen 0 1400x1000x24" node scripts/smoke.js out/smoke   # 冒�
 - `npm run dist:zip`：解压即用的 `Squiddle-<版本>-win-x64.zip`（Linux 上也能打）
 - `npm run build-web`：网页单文件 `dist/Squiddle-web.html`，脚本、样式、字体全部内嵌，双击用浏览器打开就能玩（先跑一次 `prepare-web`）
 - `npm run dist:mac`：macOS 的 `Squiddle-<版本>-mac-arm64.dmg` / `-mac-x64.dmg`（需在 Mac 上）。没有 Apple 开发者证书，只做临时签名：第一次打开会被拦，到「系统设置 → 隐私与安全性」点「仍要打开」，或在终端执行 `xattr -dr com.apple.quarantine /Applications/Squiddle.app`
-- 推送到 GitHub 后，Actions 在 Windows 和 macOS 机器上自动打包；打 `v*` 标签会发布到 Releases。
+- 推送到 GitHub 后，Actions 在 Windows 和 macOS 机器上自动打包；打 `v*` 标签会发布到 Releases。发布步骤：改 `package.json` 的 `version` 并合并进 main → `git tag v0.3.1 && git push origin v0.3.1`（标签必须和版本号一致）→ 等 Actions 打完，Releases 页自动出现 Mac（arm64 / x64 dmg + zip）和 Windows 安装包，说明里带首次打开方法。
 
 ## 第三方
 
