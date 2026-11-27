@@ -1217,8 +1217,8 @@ function makeCymbal(o){
 }
 
 // 鼓组摆放：鱿鱼在后方正中，脸朝 +z；它的左手边是 +x
-makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.4,-0.05],   normal:[0,0,-1],        R:0.52, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
-makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.56,0.0,-0.52],  normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
+makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.4,0.15],    normal:[0,0,-1],        R:0.52, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
+makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.5,0.0,-0.3],   normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
 makeDrum({key:'tom1',  label:'高嗵',   kind:'tom',   pos:[0.31,0.62,0.3],  normal:[-0.12,1,-0.5],  R:0.27, depth:0.3,  f0:172, tau:0.55, gain:0.9});
 makeDrum({key:'tom2',  label:'中嗵',   kind:'tom',   pos:[-0.33,0.62,0.3], normal:[0.12,1,-0.5],   R:0.3,  depth:0.32, f0:138, tau:0.6,  gain:0.95});
 makeDrum({key:'floor', label:'落地嗵', kind:'tom',   pos:[-0.85,-0.02,-0.35], normal:[0,1,0],      R:0.4,  depth:0.62, f0:98,  tau:0.75, gain:1.0});
@@ -1243,8 +1243,8 @@ function tripod(x, z, top, spread, a0, hCol){
   const F = (x,z)=>new V3(x, FLOOR_Y, z);
   const sn = INST.snare;
   // 军鼓架：三脚架 + 顶上三爪托架托住鼓底
-  const snTop = new V3(0.56, -sn.depth - 0.06, -0.52);
-  tripod(0.56, -0.52, snTop, 0.3, -0.35, 0.3);
+  const snTop = new V3(0.5, -sn.depth - 0.06, -0.3);
+  tripod(0.5, -0.3, snTop, 0.3, -0.35, 0.3);
   for(let i=0;i<3;i++){
     const a = -0.35 + i*2*Math.PI/3, rim = sn.g.localToWorld(new V3(Math.cos(a)*sn.R*0.85, -sn.depth - 0.02, Math.sin(a)*sn.R*0.85));
     rod(snTop, rim, 0.012);
@@ -1270,7 +1270,7 @@ function tripod(x, z, top, spread, a0, hCol){
   // 落地嗵三条腿、嗵鼓支架、底鼓支脚
   for(let i=0;i<3;i++){ const a = i/3*Math.PI*2 + 0.5, f = F(-0.85+Math.cos(a)*0.5, -0.35+Math.sin(a)*0.5); rod(f, new V3(-0.85+Math.cos(a)*0.43, -0.25, -0.35+Math.sin(a)*0.43), 0.02); rubberFoot(f); }
   for(const t of [INST.tom1, INST.tom2]){ const b = t.center.clone().addScaledVector(t.n, -t.depth); rod(new V3(b.x*0.5, 0.1, 0.22), b, 0.022); }
-  for(const sg of [-1,1]){ const f = F(sg*0.42, -0.25); rod(f, new V3(sg*0.38, -0.65, -0.05), 0.02); rubberFoot(f); }
+  for(const sg of [-1,1]){ const f = F(sg*0.42, -0.05); rod(f, new V3(sg*0.38, -0.65, 0.15), 0.02); rubberFoot(f); }
 }
 
 // ---------- 复古音箱组：鱿鱼身后左右各一套（箱头 + 一只 4×12 + 下面一只单喇叭大低音箱），标志是原创的 ----------
@@ -1723,25 +1723,6 @@ function collideLimb(L){
     for(let k=0;k<N;k++) if(LIFT2[k] > 0) L.pts[k].addScaledVector(d.n, LIFT2[k]);
     hit = true;
   }
-  // 触手之间 / 触手和头不互相穿：点对点推开（根部几节不动，免得和头部连接处打架）
-  for(const M of limbs){
-    if(M === L) continue;
-    for(let k=3;k<N;k++){
-      const rk = profile(L, L.sampF[k]); const ra = rk.r*rk.t;
-      for(let j=3;j<M.NS;j++){
-        const rj = profile(M, M.sampF[j]), need = ra + rj.r*rj.t + 0.02;
-        _cl.subVectors(L.pts[k], M.pts[j]); const dd = _cl.length();
-        if(dd < need && dd > 1e-5){ L.pts[k].addScaledVector(_cl, (need-dd)/dd*0.5); hit = true; }   // 各让一半：另一条触手轮到自己时会再让
-      }
-    }
-  }
-  for(let k=3;k<N;k++){
-    const pr = profile(L, L.sampF[k]), rr = pr.r*pr.t, c = _ck.copy(body.position); c.y -= 0.25;
-    _cl.subVectors(L.pts[k], c);
-    const need = 0.44 + rr; _cl.y *= 0.7;                      // 头部略扁的椭球
-    const dd = _cl.length();
-    if(dd < need && dd > 1e-5 && L.pts[k].y < body.position.y + 0.1){ _cl.y /= 0.7; L.pts[k].copy(c).addScaledVector(_cl.normalize(), need); hit = true; }
-  }
   if(!hit) return;
   for(let it=0; it<2; it++) for(let k=1;k<N-1;k++){            // 推出来的点偶尔会和旁边的点折回去：折角太大就放回两邻点中间
     const P0 = L.pts[k-1], P1 = L.pts[k], P2 = L.pts[k+1];
@@ -1758,6 +1739,46 @@ function collideLimb(L){
     const seg = ARC1[j] - ARC1[j-1], f = seg > 1e-9 ? (sT - ARC1[j-1])/seg : 0;
     L.pts[k].copy(_CQ[j-1]).lerp(_CQ[j], Math.min(1, Math.max(0, f)));
   }
+}
+// 两根长触手（L/R）之间不互相穿：找出挨得太近的地方，各让一半。推开量用钟形权重沿触手前后十来节摊开（不折角），
+// 再随时间平滑跟过去（不抖）；根部 22% 不参与
+const SEP_A = Array.from({length:64}, ()=>new V3()), SEP_B = Array.from({length:64}, ()=>new V3()), SEP_T = Array.from({length:64}, ()=>new V3()), _sq = new V3();
+const SEP_W = Array.from({length:11}, (_,i)=>0.5 + 0.5*Math.cos(Math.PI*i/11));
+function sepApply(L, D, k_dt){
+  const N = L.NS;
+  if(!L.sepD) L.sepD = Array.from({length:N}, ()=>new V3());
+  for(let k=0;k<N;k++){
+    let best = 0; SEP_T[k].set(0,0,0);
+    for(let j=Math.max(0, k-10); j<=Math.min(N-1, k+10); j++){
+      const w = SEP_W[Math.abs(k-j)], m = D[j].length()*w;
+      if(m > best){ best = m; SEP_T[k].copy(D[j]).multiplyScalar(w); }
+    }
+  }
+  for(let k=0;k<N;k++){
+    const g = Math.min(1, Math.max(0, (L.sampF[k] - 0.18)/0.12));
+    L.sepD[k].lerp(SEP_T[k].multiplyScalar(g), k_dt);
+    L.pts[k].add(L.sepD[k]);
+  }
+}
+function separateLimbs(dt){
+  const A = limbs[0], B = limbs[1];
+  for(let k=0;k<A.NS;k++) SEP_A[k].set(0,0,0);
+  for(let j=0;j<B.NS;j++) SEP_B[j].set(0,0,0);
+  for(let k=0;k<A.NS;k++){
+    if(A.sampF[k] < 0.22) continue;
+    const pa = profile(A, A.sampF[k]), ra = pa.r*pa.t;
+    for(let j=0;j<B.NS;j++){
+      if(B.sampF[j] < 0.22) continue;
+      const pb = profile(B, B.sampF[j]), need = ra + pb.r*pb.t + 0.02;
+      _sq.subVectors(A.pts[k], B.pts[j]); const d = _sq.length();
+      if(d >= need || d < 1e-6) continue;
+      _sq.multiplyScalar((need - d)/d*0.6);
+      if(_sq.lengthSq() > SEP_A[k].lengthSq()) SEP_A[k].copy(_sq);
+      if(_sq.lengthSq() > SEP_B[j].lengthSq()) SEP_B[j].copy(_sq).negate();
+    }
+  }
+  const kd = 1 - Math.exp(-dt*60);
+  sepApply(A, SEP_A, kd); sepApply(B, SEP_B, kd);
 }
 function drawLimb(L){
   let si = 0, rw = 0, rt = 0;
@@ -2268,6 +2289,9 @@ function frame(now){
     const ts = simT - L.contactT;      // 拍击后的压扁与回弹（阻尼弹簧）
     L.squash = ts < 0.6 ? Math.exp(-ts*9)*Math.cos(ts*30) : 0;
     L.tube.mesh.material.uniforms.flash.value = ts < 0.7 ? Math.exp(-ts*7) : 0;   // 拍中：尖端亮一下
+  }
+  separateLimbs(dt);
+  for(const L of limbs){
     collideLimb(L);
     drawLimb(L);
     checkContact(L, dt);
