@@ -1367,7 +1367,7 @@ makeStack(-2.3, -2.3, 0.38);
 const cableMat = toon(0x231e2c), ferriteMat = toon(0x6e6880);
 function addTrigger(I, hint){
   let best = 0, bd = 1e9; const v = new V3();
-  for(let i=0;i<36;i++){ const a = i/36*Math.PI*2; I.g.localToWorld(v.set(Math.cos(a)*I.R*1.1, -0.04, Math.sin(a)*I.R*1.1)); const d = v.distanceTo(hint); if(d < bd){ bd = d; best = a; } }
+  for(let i=0;i<36;i++){ const a = i/36*Math.PI*2; I.g.localToWorld(v.set(Math.cos(a)*I.R*1.1, -0.04, Math.sin(a)*I.R*1.1)); if(v.y < FLOOR_Y + 0.2) continue; const d = v.distanceTo(hint); if(d < bd){ bd = d; best = a; } }   // 触发器别夹到贴地的位置
   const ca = Math.cos(best), sa = Math.sin(best), rr = I.R*1.03 + 0.06, out = new V3(ca, 0, sa);
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.09), footMat); box.position.set(ca*rr, -0.045, sa*rr); box.rotation.y = -best; I.g.add(box);
   const jk = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.06, 6), standMat); jk.position.set(ca*(rr + 0.05), -0.045, sa*(rr + 0.05)); jk.quaternion.setFromUnitVectors(UPV, out); I.g.add(jk);
@@ -1384,7 +1384,10 @@ function ampJack(A, k){                                  // 箱头面板左端�
   return {jx, jy, jz, local:(x, y, z)=>A.sh.localToWorld(new V3(x, y, z))};
 }
 function addCable(pts, r){
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  // 样条在电线从鼓上垂到地面的拐弯处会往下冲出一点，钻到地板下面：先密采样，把低于地面的点抬回地面，再用这些点画
+  const raw = new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(240), fy = FLOOR_Y + r + 0.004;
+  for(const p of raw) if(p.y < fy) p.y = fy;
+  const curve = new THREE.CatmullRomCurve3(raw, false, 'centripetal');
   scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 160, r, 5, false), cableMat));
   for(const t of [0.04, 0.965]){
     const p = curve.getPointAt(t), tg = curve.getTangentAt(t);
@@ -2169,7 +2172,7 @@ let camLabel = '用户透视';
 const INAME = {kick:'底鼓', snare:'军鼓', hihat:'踩镲', tom1:'高嗵', tom2:'中嗵', floor:'落地嗵', crash:'吊镲'};
 // 每件乐器一个不被别的东西挡住的机位：看向点 xyz、方位角、俯仰角、距离、视角
 const ISHOT = {
-  kick:[0.05,-0.45,-0.3, 2.5,1.35,2.6,34], snare:[0.5,0.05,-0.35, 0.55,0.95,2.3,30], hihat:[1.1,0.35,-0.55, 1.15,1.0,2.3,30],
+  kick:[0.05,-0.45,-0.3, 2.5,1.35,2.6,34], snare:[0.68,0.12,-0.35, 0.6,0.95,2.3,30], hihat:[1.1,0.35,-0.55, 1.15,1.0,2.3,30],
   tom1:[0.25,0.65,0.2, 0.2,1.05,2.3,30], tom2:[-0.25,0.65,0.2, -0.2,1.05,2.3,30], floor:[-0.85,0.05,-0.35, -0.95,1.0,2.3,30], crash:[0.9,1.15,0.1, 0.45,0.85,2.5,32]};
 const pm1 = () => Math.random() < 0.5 ? -1 : 1, rnd = (a, b) => a + Math.random()*(b - a);
 const SHOTS = {
@@ -2181,7 +2184,7 @@ const SHOTS = {
   inst: k=>{ const q = ISHOT[k]; return {label:'特写 · ' + INAME[k], key:k, tg:new V3(q[0], q[1], q[2]), th:q[3] + rnd(-0.12, 0.12), dth:0.1*pm1(), ph:q[4], r:q[5], dr:-0.25, fov:q[6]}; },
 };
 const SHOT_W = [['inst', 3.2], ['wide', 2], ['face', 1.6], ['low', 1], ['back', 1], ['top', 0.8]];
-const DIR = {on:false, w:0, shot:null, kind:'', t:0, len:4, cutReq:false, pose:{pos:new V3(), look:new V3(), fov:FOV0}, cur:{pos:new V3(), look:new V3(), fov:FOV0}};
+const DIR = {on:false, w:0, shot:null, kind:'', t:0, len:4, cutReq:false, from:null, tt:0, pose:{pos:new V3(), look:new V3(), fov:FOV0}, cur:{pos:new V3(), look:new V3(), fov:FOV0}};
 function pickShot(force){
   let kind = force;
   if(!kind){
@@ -2196,6 +2199,9 @@ function pickShot(force){
     if(!k || !ISHOT[k] || (DIR.shot && DIR.shot.key === k)) k = ks[Math.floor(Math.random()*ks.length)];
     shot = SHOTS.inst(k);
   } else shot = SHOTS[kind]();
+  if(DIR.shot && DIR.w > 0.5){                // 换镜头不硬切：从当前画面平滑运镜过去
+    const C = DIR.cur; DIR.from = {look:C.look.clone(), off:C.pos.clone().sub(C.look), fov:C.fov}; DIR.tt = 0;
+  } else DIR.from = null;
   DIR.shot = shot; DIR.kind = kind; DIR.t = 0; DIR.len = rnd(3.2, 6); DIR.cutReq = false;
   if(shot.gaze) CH.gazeReq = 1;              // 脸部特写：她会看过来
 }
@@ -2205,8 +2211,27 @@ function dirPose(o){
   if(o.pos.y < FLOOR_Y + 0.15) o.pos.y = FLOOR_Y + 0.15;
   o.look.copy(S.tg); o.fov = S.fov; return o;
 }
+// 运镜：看向点直线过去，机位绕看向点按球坐标走（方位角走近的那边），不会从鱿鱼身体里穿过去
+const CAM_TR = 1.3, _o0 = new V3(), _o1 = new V3();
+function blendShot(o, dt){
+  const F = DIR.from; if(!F) return o;
+  DIR.tt += dt; const u = Math.min(1, DIR.tt/CAM_TR), e = u*u*u*(u*(u*6 - 15) + 10);
+  if(u >= 1){ DIR.from = null; return o; }
+  _o1.subVectors(o.pos, o.look);
+  const r0 = F.off.length(), r1 = _o1.length();
+  const ph0 = Math.acos(Math.max(-1, Math.min(1, F.off.y/r0))), ph1 = Math.acos(Math.max(-1, Math.min(1, _o1.y/r1)));
+  const th0 = Math.atan2(F.off.x, F.off.z); let dth = Math.atan2(_o1.x, _o1.z) - th0;
+  dth = Math.atan2(Math.sin(dth), Math.cos(dth));
+  const r = r0 + (r1 - r0)*e, ph = ph0 + (ph1 - ph0)*e, th = th0 + dth*e, sp = Math.sin(ph);
+  o.look.lerpVectors(F.look, o.look, e);
+  o.pos.set(o.look.x + r*sp*Math.sin(th), o.look.y + r*Math.cos(ph), o.look.z + r*sp*Math.cos(th));
+  if(o.pos.y < FLOOR_Y + 0.15) o.pos.y = FLOOR_Y + 0.15;
+  o.fov = F.fov + (o.fov - F.fov)*e;
+  return o;
+}
 function dirHit(I){                          // 到点了就在底鼓、军鼓或吊镲那一下上切；吊镲一响也常常顺手切一刀
   if(!DIR.on || DIR.w < 0.5 || !DIR.shot) return;
+  if(DIR.from) return;                       // 还在运镜途中就不再切
   if(DIR.cutReq && (I.key === 'kick' || I.key === 'snare' || I.key === 'crash')) pickShot();
   else if(I.key === 'crash' && DIR.t > 1.6 && Math.random() < 0.6) pickShot(Math.random() < 0.5 ? 'face' : 'wide');
 }
@@ -2220,7 +2245,7 @@ function handOff(){
   orbit.r = clampR(dist*Math.tan(C.fov*Math.PI/360)/Math.tan(FOV0*Math.PI/360));
   orbit.ph = clampPh(Math.acos(Math.max(-1, Math.min(1, d.y/dist))));
   orbit.th = Math.atan2(d.x, d.z);
-  DIR.w = 0; DIR.shot = null; setDirector(false);
+  DIR.w = 0; DIR.shot = null; DIR.from = null; setDirector(false);
 }
 function updateCamera(dt){
   orbitPose(UPOSE);
@@ -2233,7 +2258,7 @@ function updateCamera(dt){
     if(DIR.t > DIR.len + 1.2) pickShot();    // 一直没等到重拍也照切
   }
   if(DIR.w > 0 && DIR.shot){
-    dirPose(DIR.pose);
+    blendShot(dirPose(DIR.pose), dt);
     const e = DIR.w*DIR.w*(3 - 2*DIR.w);
     C.pos.lerpVectors(UPOSE.pos, DIR.pose.pos, e); C.look.lerpVectors(UPOSE.look, DIR.pose.look, e); C.fov = UPOSE.fov + (DIR.pose.fov - UPOSE.fov)*e;
   } else {
