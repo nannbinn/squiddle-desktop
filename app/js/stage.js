@@ -2263,7 +2263,25 @@ function handOff(){
   orbit.r = clampR(dist*Math.tan(C.fov*Math.PI/360)/Math.tan(FOV0*Math.PI/360));
   orbit.ph = clampPh(Math.acos(Math.max(-1, Math.min(1, d.y/dist))));
   orbit.th = Math.atan2(d.x, d.z);
-  DIR.w = 0; DIR.shot = null; DIR.from = null; setDirector(false);
+  DIR.w = 0; DIR.shot = null; DIR.from = null; CE.init = false; setDirector(false);
+}
+// 整体镜头缓动：导播算出来的机位外面再套一层临界阻尼弹簧，像有分量的摄像机一样跟过去。
+// 运镜收尾时顺着镜头本身的慢漂移接过去，不会一下停住。CAM_EASE 是弹簧的快慢（越大跟得越紧，0 关掉）
+const CAM_EASE = 5, CE = {init:false, p:new V3(), vp:new V3(), l:new V3(), vl:new V3(), f:0, vf:0}, _ce = new V3();
+function springV(x, v, target, w, dt){            // 临界阻尼：x'' = -2w x' - w²(x - target)
+  _ce.subVectors(x, target).multiplyScalar(-w*w).addScaledVector(v, -2*w);
+  v.addScaledVector(_ce, dt); x.addScaledVector(v, dt);
+}
+function camEase(C, dt){
+  if(!CAM_EASE) return;
+  if(!CE.init){ CE.p.copy(C.pos); CE.l.copy(C.look); CE.f = C.fov; CE.vp.set(0,0,0); CE.vl.set(0,0,0); CE.vf = 0; CE.init = true; return; }
+  const w = CAM_EASE, n = Math.max(1, Math.ceil(dt/0.008)), h = dt/n;   // 小步积分，低帧率下也稳
+  for(let i=0;i<n;i++){
+    springV(CE.p, CE.vp, C.pos, w, h); springV(CE.l, CE.vl, C.look, w, h);
+    CE.vf += (-w*w*(CE.f - C.fov) - 2*w*CE.vf)*h; CE.f += CE.vf*h;
+  }
+  if(CE.p.y < FLOOR_Y + 0.15) CE.p.y = FLOOR_Y + 0.15;
+  C.pos.copy(CE.p); C.look.copy(CE.l); C.fov = CE.f;
 }
 function updateCamera(dt){
   orbitPose(UPOSE);
@@ -2279,9 +2297,11 @@ function updateCamera(dt){
     blendShot(dirPose(DIR.pose), dt);
     const e = DIR.w*DIR.w*(3 - 2*DIR.w);
     C.pos.lerpVectors(UPOSE.pos, DIR.pose.pos, e); C.look.lerpVectors(UPOSE.look, DIR.pose.look, e); C.fov = UPOSE.fov + (DIR.pose.fov - UPOSE.fov)*e;
+    camEase(C, dt);
   } else {
     C.pos.copy(UPOSE.pos); C.look.copy(UPOSE.look); C.fov = UPOSE.fov;
     if(!want) DIR.shot = null;
+    CE.init = false;
   }
   applyCam(C.pos, C.look, C.fov);
   const lab = DIR.w > 0.5 && DIR.shot ? '导播 · ' + DIR.shot.label : '用户透视';
