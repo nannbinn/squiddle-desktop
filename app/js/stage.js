@@ -831,7 +831,7 @@ body.position.copy(bodyBase);
 const ringPoint = (ang, out) => out.set(Math.cos(ang)*RING_R, RING_Y, Math.sin(ang)*RING_R);
 const squidRing = new V3(bodyBase.x, bodyBase.y + RING_Y, bodyBase.z);
 // 头底一圈的十个位置：前方四个给打鼓的触手，其余六条腕待机
-const SLOT = {L:-0.314, R:0.314, K:-0.942, F:0.942};
+const SLOT = {L:-0.942, R:-0.314, K:0.314, F:0.942};   // 按目标从右到左排：踩镲/吊镲、军鼓/嗵、底鼓、落地嗵，触手根部互不交叉
 const IDLE_SLOTS = [1.571, -1.571, 2.199, -2.199, 2.827, -2.827];
 
 const sphereGeo = new THREE.SphereGeometry(1, 8, 6), ringGeo = new THREE.TorusGeometry(1, 0.42, 4, 8);
@@ -1217,8 +1217,8 @@ function makeCymbal(o){
 }
 
 // 鼓组摆放：鱿鱼在后方正中，脸朝 +z；它的左手边是 +x
-makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.4,0.15],    normal:[0,0,-1],        R:0.52, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
-makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.5,0.0,-0.3],   normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
+makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.46,-0.05],  normal:[0,0,-1],        R:0.46, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
+makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.72,0.08,-0.3],  normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
 makeDrum({key:'tom1',  label:'高嗵',   kind:'tom',   pos:[0.31,0.62,0.3],  normal:[-0.12,1,-0.5],  R:0.27, depth:0.3,  f0:172, tau:0.55, gain:0.9});
 makeDrum({key:'tom2',  label:'中嗵',   kind:'tom',   pos:[-0.33,0.62,0.3], normal:[0.12,1,-0.5],   R:0.3,  depth:0.32, f0:138, tau:0.6,  gain:0.95});
 makeDrum({key:'floor', label:'落地嗵', kind:'tom',   pos:[-0.85,-0.02,-0.35], normal:[0,1,0],      R:0.4,  depth:0.62, f0:98,  tau:0.75, gain:1.0});
@@ -1243,8 +1243,8 @@ function tripod(x, z, top, spread, a0, hCol){
   const F = (x,z)=>new V3(x, FLOOR_Y, z);
   const sn = INST.snare;
   // 军鼓架：三脚架 + 顶上三爪托架托住鼓底
-  const snTop = new V3(0.5, -sn.depth - 0.06, -0.3);
-  tripod(0.5, -0.3, snTop, 0.3, -0.35, 0.3);
+  const snTop = new V3(0.72, 0.08 - sn.depth - 0.06, -0.3);
+  tripod(0.72, -0.3, snTop, 0.3, -0.35, 0.3);
   for(let i=0;i<3;i++){
     const a = -0.35 + i*2*Math.PI/3, rim = sn.g.localToWorld(new V3(Math.cos(a)*sn.R*0.85, -sn.depth - 0.02, Math.sin(a)*sn.R*0.85));
     rod(snTop, rim, 0.012);
@@ -1270,7 +1270,7 @@ function tripod(x, z, top, spread, a0, hCol){
   // 落地嗵三条腿、嗵鼓支架、底鼓支脚
   for(let i=0;i<3;i++){ const a = i/3*Math.PI*2 + 0.5, f = F(-0.85+Math.cos(a)*0.5, -0.35+Math.sin(a)*0.5); rod(f, new V3(-0.85+Math.cos(a)*0.43, -0.25, -0.35+Math.sin(a)*0.43), 0.02); rubberFoot(f); }
   for(const t of [INST.tom1, INST.tom2]){ const b = t.center.clone().addScaledVector(t.n, -t.depth); rod(new V3(b.x*0.5, 0.1, 0.22), b, 0.022); }
-  for(const sg of [-1,1]){ const f = F(sg*0.42, -0.05); rod(f, new V3(sg*0.38, -0.65, 0.15), 0.02); rubberFoot(f); }
+  for(const sg of [-1,1]){ const f = F(sg*0.38, -0.25); rod(f, new V3(sg*0.34, -0.68, -0.05), 0.02); rubberFoot(f); }
 }
 
 // ---------- 复古音箱组：鱿鱼身后左右各一套（箱头 + 一只 4×12 + 下面一只单喇叭大低音箱），标志是原创的 ----------
@@ -1740,35 +1740,39 @@ function collideLimb(L){
     L.pts[k].copy(_CQ[j-1]).lerp(_CQ[j], Math.min(1, Math.max(0, f)));
   }
 }
-// 两根长触手（L/R）之间不互相穿：找出挨得太近的地方，各让一半。推开量用钟形权重沿触手前后十来节摊开（不折角），
-// 再随时间平滑跟过去（不抖）；根部 22% 不参与
+// 相邻的打鼓触手之间不互相穿：找出挨得太近的地方，各让一半。推开量用钟形权重沿触手前后十来节摊开（不折角），
+// 再随时间平滑跟过去（不抖）；根部 15% 不参与
 const SEP_A = Array.from({length:64}, ()=>new V3()), SEP_B = Array.from({length:64}, ()=>new V3()), SEP_T = Array.from({length:64}, ()=>new V3()), _sq = new V3();
 const SEP_W = Array.from({length:11}, (_,i)=>0.5 + 0.5*Math.cos(Math.PI*i/11));
-function sepApply(L, D, k_dt){
+function sepApply(L, D){
   const N = L.NS;
-  if(!L.sepD) L.sepD = Array.from({length:N}, ()=>new V3());
+  if(!L.sepAcc) L.sepAcc = Array.from({length:N}, ()=>new V3());
   for(let k=0;k<N;k++){
     let best = 0; SEP_T[k].set(0,0,0);
     for(let j=Math.max(0, k-10); j<=Math.min(N-1, k+10); j++){
       const w = SEP_W[Math.abs(k-j)], m = D[j].length()*w;
       if(m > best){ best = m; SEP_T[k].copy(D[j]).multiplyScalar(w); }
     }
-  }
-  for(let k=0;k<N;k++){
-    const g = Math.min(1, Math.max(0, (L.sampF[k] - 0.18)/0.12));
-    L.sepD[k].lerp(SEP_T[k].multiplyScalar(g), k_dt);
-    L.pts[k].add(L.sepD[k]);
+    const g = Math.min(1, Math.max(0, (L.sampF[k] - 0.12)/0.1));
+    SEP_T[k].multiplyScalar(g);
+    L.sepAcc[k].add(SEP_T[k]);
   }
 }
 function separateLimbs(dt){
-  const A = limbs[0], B = limbs[1];
+  for(const L of limbs){ if(!L.sepD){ L.sepD = Array.from({length:L.NS}, ()=>new V3()); L.sepAcc = Array.from({length:L.NS}, ()=>new V3()); } for(const v of L.sepAcc) v.set(0,0,0); }
+  const kd = 1 - Math.exp(-dt*60);
+  for(const [a, b] of SEP_PAIRS) separatePair(limbs[a], limbs[b], kd);
+  for(const L of limbs) if(L.sepAcc){ for(let k=0;k<L.NS;k++){ L.sepD[k].lerp(L.sepAcc[k], kd); L.pts[k].add(L.sepD[k]); } }
+}
+const SEP_PAIRS = [[0, 1], [1, 2]];      // 相邻的根：踩镲触手–军鼓触手、军鼓触手–底鼓触手
+function separatePair(A, B, kd){
   for(let k=0;k<A.NS;k++) SEP_A[k].set(0,0,0);
   for(let j=0;j<B.NS;j++) SEP_B[j].set(0,0,0);
   for(let k=0;k<A.NS;k++){
-    if(A.sampF[k] < 0.22) continue;
+    if(A.sampF[k] < 0.15) continue;
     const pa = profile(A, A.sampF[k]), ra = pa.r*pa.t;
     for(let j=0;j<B.NS;j++){
-      if(B.sampF[j] < 0.22) continue;
+      if(B.sampF[j] < 0.15) continue;
       const pb = profile(B, B.sampF[j]), need = ra + pb.r*pb.t + 0.02;
       _sq.subVectors(A.pts[k], B.pts[j]); const d = _sq.length();
       if(d >= need || d < 1e-6) continue;
@@ -1777,8 +1781,7 @@ function separateLimbs(dt){
       if(_sq.lengthSq() > SEP_B[j].lengthSq()) SEP_B[j].copy(_sq).negate();
     }
   }
-  const kd = 1 - Math.exp(-dt*60);
-  sepApply(A, SEP_A, kd); sepApply(B, SEP_B, kd);
+  sepApply(A, SEP_A); sepApply(B, SEP_B);
 }
 function drawLimb(L){
   let si = 0, rw = 0, rt = 0;
@@ -1823,7 +1826,7 @@ const TRACKS = {
 const TENT = {lens:[0.6,0.52,0.45,0.4], LC:0.24, per:[11,9,8,13], perc:8, club:true, curlK:4.6, hc:0.19, thick:0.05, amp:0.85};
 const ARMO = {lens:[0.55,0.45,0.42,0.35], LC:0.14, per:[10,8,7,9], perc:6, club:false, curlK:7, hc:0.165, thick:0.03, amp:0.7};
 // 打底鼓的腕：加长一些，根部往下走，贴着地面绕到鼓皮下半部，末段从下往上拍（不再从头顶直插下来、路过军鼓）
-const KICKO = Object.assign({}, ARMO, {lens:[0.95,0.75,0.55,0.35], per:[16,13,10,9], approach:new V3(0, 1, 0), dropY:1.4, planar:0.04, qmax:[2.0, 2.0, 3.0, 0.9]});   // 第三段允许弯得更狠：J 形的底
+const KICKO = Object.assign({}, ARMO, {lens:[0.8,0.65,0.5,0.35], per:[14,12,9,9], approach:new V3(0, 1, 0), dropY:1.4, planar:0.04, qmax:[2.0, 2.0, 3.0, 0.9]});   // 第三段允许弯得更狠：J 形的底
 makeLimb(Object.assign({key:'L', ang:SLOT.L, track:TRACKS.L}, TENT));
 makeLimb(Object.assign({key:'R', ang:SLOT.R, track:TRACKS.R}, TENT));
 makeLimb(Object.assign({key:'K', ang:SLOT.K, track:TRACKS.K}, KICKO));
