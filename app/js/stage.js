@@ -1498,6 +1498,13 @@ function initAudio(){
   noiseShort = mk(0.06); noiseLong = mk(2.6);
 }
 const audioOn = () => actx && actx.state === 'running';
+// 退出前淡出：外壳在关窗前调用，避免正在发声时被硬切产生"啪"一声
+window.__squiddleFadeOut = (ms=140) => {
+  if(!audioOn()) return Promise.resolve();
+  const t = actx.currentTime, k = ms/1000;
+  for(const g of [master, songGain]){ if(!g) continue; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(0, t+k); }
+  return new Promise(r => setTimeout(r, ms+30));
+};
 function noiseBurst(buf, t, filters, gain, dur){
   const src = actx.createBufferSource(); src.buffer = buf;
   let node = src;
@@ -2286,6 +2293,8 @@ function frame(now){
 }
 window.__dbg = {camera, orbit, body, limbs, arms:armDefs, INST, HITS, eyes, eyeLook, CH, ORGANS, STARS, JT, mantleG, DIR, pickShot, SHOTS, SPOT, FANS};
 requestAnimationFrame(frame);
+// 窗口被挡住/切回来：重置计时，丢掉积压的时间差，避免回来第一下一次性追赶造成卡顿
+document.addEventListener('visibilitychange', () => { last = performance.now(); lastDraw = 0; });
 
 // ---------- 播放控制（按钮在界面那边，见文件末尾的 Squiddle 接口） ----------
 function unlockAudio(){
