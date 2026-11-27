@@ -1218,7 +1218,7 @@ function makeCymbal(o){
 
 // 鼓组摆放：鱿鱼在后方正中，脸朝 +z；它的左手边是 +x
 makeDrum({key:'kick',  label:'底鼓',   kind:'kick',  pos:[0,-0.4,-0.05],   normal:[0,0,-1],        R:0.52, depth:0.55, f0:52,  tau:0.5,  gain:1.3});
-makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.5,0.0,-0.3],   normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
+makeDrum({key:'snare', label:'军鼓',   kind:'snare', pos:[0.56,0.0,-0.52],  normal:[-0.1,1,-0.15],  R:0.34, depth:0.26, f0:185, tau:0.32, gain:0.85});
 makeDrum({key:'tom1',  label:'高嗵',   kind:'tom',   pos:[0.31,0.62,0.3],  normal:[-0.12,1,-0.5],  R:0.27, depth:0.3,  f0:172, tau:0.55, gain:0.9});
 makeDrum({key:'tom2',  label:'中嗵',   kind:'tom',   pos:[-0.33,0.62,0.3], normal:[0.12,1,-0.5],   R:0.3,  depth:0.32, f0:138, tau:0.6,  gain:0.95});
 makeDrum({key:'floor', label:'落地嗵', kind:'tom',   pos:[-0.85,-0.02,-0.35], normal:[0,1,0],      R:0.4,  depth:0.62, f0:98,  tau:0.75, gain:1.0});
@@ -1243,8 +1243,8 @@ function tripod(x, z, top, spread, a0, hCol){
   const F = (x,z)=>new V3(x, FLOOR_Y, z);
   const sn = INST.snare;
   // 军鼓架：三脚架 + 顶上三爪托架托住鼓底
-  const snTop = new V3(0.5, -sn.depth - 0.06, -0.3);
-  tripod(0.5, -0.3, snTop, 0.3, -0.35, 0.3);
+  const snTop = new V3(0.56, -sn.depth - 0.06, -0.52);
+  tripod(0.56, -0.52, snTop, 0.3, -0.35, 0.3);
   for(let i=0;i<3;i++){
     const a = -0.35 + i*2*Math.PI/3, rim = sn.g.localToWorld(new V3(Math.cos(a)*sn.R*0.85, -sn.depth - 0.02, Math.sin(a)*sn.R*0.85));
     rod(snTop, rim, 0.012);
@@ -1722,6 +1722,25 @@ function collideLimb(L){
     }
     for(let k=0;k<N;k++) if(LIFT2[k] > 0) L.pts[k].addScaledVector(d.n, LIFT2[k]);
     hit = true;
+  }
+  // 触手之间 / 触手和头不互相穿：点对点推开（根部几节不动，免得和头部连接处打架）
+  for(const M of limbs){
+    if(M === L) continue;
+    for(let k=3;k<N;k++){
+      const rk = profile(L, L.sampF[k]); const ra = rk.r*rk.t;
+      for(let j=3;j<M.NS;j++){
+        const rj = profile(M, M.sampF[j]), need = ra + rj.r*rj.t + 0.02;
+        _cl.subVectors(L.pts[k], M.pts[j]); const dd = _cl.length();
+        if(dd < need && dd > 1e-5){ L.pts[k].addScaledVector(_cl, (need-dd)/dd*0.5); hit = true; }   // 各让一半：另一条触手轮到自己时会再让
+      }
+    }
+  }
+  for(let k=3;k<N;k++){
+    const pr = profile(L, L.sampF[k]), rr = pr.r*pr.t, c = _ck.copy(body.position); c.y -= 0.25;
+    _cl.subVectors(L.pts[k], c);
+    const need = 0.44 + rr; _cl.y *= 0.7;                      // 头部略扁的椭球
+    const dd = _cl.length();
+    if(dd < need && dd > 1e-5 && L.pts[k].y < body.position.y + 0.1){ _cl.y /= 0.7; L.pts[k].copy(c).addScaledVector(_cl.normalize(), need); hit = true; }
   }
   if(!hit) return;
   for(let it=0; it<2; it++) for(let k=1;k<N-1;k++){            // 推出来的点偶尔会和旁边的点折回去：折角太大就放回两邻点中间
