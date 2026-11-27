@@ -6,6 +6,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: '打完后按 package.json 版本号建标签并发布 Release'
+        type: boolean
+        default: false
 permissions:
   contents: write
 jobs:
@@ -52,7 +57,7 @@ jobs:
           if-no-files-found: error
   # 打 v* 标签（如 v0.3.1）后，等 Windows / Mac 都打完，一次性建好 Release 并上传所有安装包
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
     needs: [windows, macos]
     runs-on: ubuntu-latest
     steps:
@@ -60,7 +65,8 @@ jobs:
       - name: Check tag matches package.json version
         run: |
           v="v$(node -p "require('./package.json').version")"
-          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "标签 $GITHUB_REF_NAME 与 package.json 版本 $v 不一致，请先改版本号再打标签"; exit 1; fi
+          echo "TAG=$v" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$v" != "$GITHUB_REF_NAME" ]; then echo "标签 $GITHUB_REF_NAME 与 package.json 版本 $v 不一致，请先改版本号再打标签"; exit 1; fi
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -83,6 +89,8 @@ jobs:
           EOF
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
           body_path: notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
