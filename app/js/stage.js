@@ -2212,7 +2212,7 @@ function dirPose(o){
   o.look.copy(S.tg); o.fov = S.fov; return o;
 }
 // 运镜：看向点直线过去，机位绕看向点按球坐标走（方位角走近的那边），不会从鱿鱼身体里穿过去
-const CAM_TR = 1.3, _o0 = new V3(), _o1 = new V3();
+const CAM_TR = 0.7, _o0 = new V3(), _o1 = new V3();
 function blendShot(o, dt){
   const F = DIR.from; if(!F) return o;
   DIR.tt += dt; const u = Math.min(1, DIR.tt/CAM_TR), e = u*u*u*(u*(u*6 - 15) + 10);
@@ -2229,11 +2229,10 @@ function blendShot(o, dt){
   o.fov = F.fov + (o.fov - F.fov)*e;
   return o;
 }
-function dirHit(I){                          // 到点了就在底鼓、军鼓或吊镲那一下上切；吊镲一响也常常顺手切一刀
+function dirHit(I){                          // 到点了就在底鼓或军鼓那一下上切（吊镲不切，让人看完整个动作）
   if(!DIR.on || DIR.w < 0.5 || !DIR.shot) return;
   if(DIR.from) return;                       // 还在运镜途中就不再切
-  if(DIR.cutReq && (I.key === 'kick' || I.key === 'snare' || I.key === 'crash')) pickShot();
-  else if(I.key === 'crash' && DIR.t > 1.6 && Math.random() < 0.6) pickShot(Math.random() < 0.5 ? 'face' : 'wide');
+  if(DIR.cutReq && (I.key === 'kick' || I.key === 'snare')) pickShot();
 }
 function setDirector(on){ DIR.on = on; emit('state', state()); }
 // 手动拖动、平移或缩放时，导播把镜头交回给你：按当前画面换算成轨道相机的参数，画面不会跳
