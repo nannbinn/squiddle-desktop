@@ -1,4 +1,4 @@
-# 在 GitHub 的 Windows / macOS 机器上打包：每次推送出可下载的构建，打 v* 标签时发到 Releases
+# 在 GitHub 的 Windows / macOS 机器上打包：每次推送出可下载的构建，打 v* 标签时由 release 任务汇总发到 Releases
 name: build
 on:
   push:
@@ -26,11 +26,6 @@ jobs:
           path: |
             dist/*.exe
           if-no-files-found: error
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.exe
   macos:
     runs-on: macos-latest
     steps:
@@ -53,11 +48,45 @@ jobs:
           name: Squiddle-macos
           path: |
             dist/*.dmg
-          if-no-files-found: error
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.dmg
             dist/*-mac-*.zip
+          if-no-files-found: error
+  # 打 v* 标签（如 v0.3.1）后，等 Windows / Mac 都打完，一次性建好 Release 并上传所有安装包
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches package.json version
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "标签 $GITHUB_REF_NAME 与 package.json 版本 $v 不一致，请先改版本号再打标签"; exit 1; fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Release notes
+        run: |
+          cat > notes.md <<'EOF'
+          ## 下载
+          - **Mac**：Apple 芯片（M1/M2/M3/M4…）下 `*-mac-arm64.dmg`；Intel 芯片下 `*-mac-x64.dmg`（`.zip` 是同内容的压缩包）
+          - **Windows**：`Squiddle-Setup-*.exe` 安装版；`Squiddle-*-portable.exe` 免安装版
+
+          ## Mac 第一次打开
+          应用没有苹果开发者签名，第一次打开会被系统拦下，这是正常的：
+          1. 打开 dmg，把 Squiddle 拖进「应用程序」
+          2. 在「应用程序」里**右键 Squiddle → 打开**，弹窗里再点「打开」
+          3. 如果右键也不行：先双击打开一次被拦下，再到「系统设置 → 隐私与安全性」，拉到最下面点「仍要打开」
+          4. 只需要做一次，之后正常双击即可
+
+          ## Windows 第一次打开
+          若出现 SmartScreen 蓝色提示，点「更多信息 → 仍要运行」。
+          EOF
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/Squiddle-windows/*.exe
+            artifacts/Squiddle-macos/*.dmg
+            artifacts/Squiddle-macos/*.zip
