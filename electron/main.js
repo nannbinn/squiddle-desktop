@@ -30,6 +30,12 @@ function createWindow() {
   const send = () => win.webContents.send('win-state', { max: win.isMaximized(), full: win.isFullScreen() });
   for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, send);
   win.webContents.on('did-finish-load', send);
+  // 关窗前先把声音淡出再关，避免播放中被硬切出现破音
+  let closing = false;
+  win.on('close', e => {
+    if (closing) return; closing = true; e.preventDefault();
+    win.webContents.executeJavaScript('window.__squiddleFadeOut ? window.__squiddleFadeOut(140) : 0').catch(() => {}).finally(() => win.close());
+  });
   win.loadFile(path.join(__dirname, '..', 'app', 'index.html'));
   return win;
 }
