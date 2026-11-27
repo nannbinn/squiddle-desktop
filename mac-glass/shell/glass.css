@@ -1,0 +1,23 @@
+/* Mac 玻璃外壳专用样式（加载完插到 <head> 最后，覆盖 ui.css）：
+   页面背景透明，顶条和四周 5px 一圈透出窗口的 Liquid Glass（系统浅色）；舞台 + 播放条合成一块缩进去的圆角面板。 */
+:root{ --tb:40px; --rim:5px; --ir:11px; }   /* 面板圆角 11 = 窗口圆角 16 - 玻璃边 5，和窗口同心 */
+html, body, .win{ background:transparent !important; }
+.win{ padding:0 var(--rim) var(--rim); }
+/* 收起的菜单卡片挂在舞台右边外面，WebKit 里会把 .win 横着滚过去约 300px（整块界面往左偏）。
+   clip 不是滚动容器，怎么都滚不动；舞台区也裁掉，收起的卡片不会从边上露出来 */
+.win, .stagewrap{ overflow:clip; }
+
+/* 顶条：左边让出红黄绿按钮的位置；自绘的窗口按钮在 Mac 上不要 */
+.tb{ padding-left:85px; }
+#wbtns{ display:none !important; }
+
+/* 内容面板 */
+.body{ background:var(--night); border-radius:var(--ir) var(--ir) 0 0; padding-top:var(--g); }
+.player{ background:var(--night); border-radius:0 0 var(--ir) var(--ir); }
+.splash{ inset:var(--tb) var(--rim) var(--rim) var(--rim); border-radius:var(--ir); overflow:hidden; }
+
+/* 全屏：不要玻璃边，内容铺满 */
+.win.full{ padding:0; }
+.win.full .body{ border-radius:0; padding-top:0; }
+.win.full .splash{ inset:0; border-radius:0; }
+html:has(.win.full), html:has(.win.full) body{ background:var(--night) !important; }

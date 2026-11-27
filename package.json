@@ -11,7 +11,8 @@
     "start": "electron .",
     "dist": "electron-builder --win --x64 --publish never",
     "dist:zip": "electron-builder --win dir --x64 --publish never && node scripts/zip-win.js",
-    "dist:mac": "electron-builder --mac --arm64 --x64 --publish never"
+    "dist:mac": "electron-builder --mac --arm64 --x64 --publish never",
+    "dist:mac-glass": "zsh mac-glass/build.sh"
   },
   "devDependencies": {
     "@fontsource/fusion-pixel-12px-proportional-sc": "5.3.0",
